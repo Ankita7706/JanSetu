@@ -14,6 +14,7 @@ import { authService } from '../../services/authService';
 import StatusBadge from '../../components/common/StatusBadge';
 import PriorityBadge from '../../components/common/PriorityBadge';
 import CategoryBadge from '../../components/common/CategoryBadge';
+import MapView, { type MapViewMarker } from '../../components/map/MapView';
 import type { CitizenRequest, RequestStatus } from '../../types';
 
 export default function GovRequests() {
@@ -92,6 +93,39 @@ export default function GovRequests() {
 
   const regions = ['All', 'Bhubaneswar', 'Cuttack', 'Kalahandi', 'Koraput', 'Malkangiri', 'Rayagada', 'Nuapada'];
   const categories = ['All', 'Roads', 'Water', 'Streetlights', 'Drainage', 'Public Transport', 'Schools & Hospitals', 'Electricity', 'Sanitation'];
+  const mapMarkers: MapViewMarker[] = filtered.flatMap(req => {
+    const point = req.locationDetails
+      ? { latitude: req.locationDetails.latitude, longitude: req.locationDetails.longitude }
+      : req.coordinates
+        ? { latitude: req.coordinates.lat, longitude: req.coordinates.lng }
+        : undefined;
+    if (!point || !Number.isFinite(point.latitude) || !Number.isFinite(point.longitude) ||
+      point.latitude < -90 || point.latitude > 90 || point.longitude < -180 || point.longitude > 180) return [];
+
+    const address = req.locationDetails?.address || req.location;
+    return [{
+      id: req.id,
+      ...point,
+      label: `${req.id} - ${req.category}`,
+      popup: (
+        <div className="min-w-52 space-y-1.5 text-xs">
+          <p className="font-mono font-extrabold">{req.id}</p>
+          <p className="font-bold">{req.category}: {req.description}</p>
+          <p>Status: {req.status.replace('_', ' ')}</p>
+          {req.aiAnalysis?.severity && <p>Severity: {req.aiAnalysis.severity}</p>}
+          <p className="text-black/70">{address}</p>
+          {req.affectedCount != null && <p>{req.affectedCount.toLocaleString()} citizens affected</p>}
+          <button
+            type="button"
+            onClick={() => handleOpenModal(req)}
+            className="mt-1 rounded-md border-2 border-black bg-brand-yellow px-2.5 py-1.5 font-extrabold"
+          >
+            Open request details
+          </button>
+        </div>
+      ),
+    }];
+  });
 
   return (
     <div className="space-y-6">
@@ -215,6 +249,24 @@ export default function GovRequests() {
           </div>
         </div>
       </div>
+
+      {/* Request location map */}
+      <section className="overflow-hidden rounded-2xl border-2 border-black bg-white shadow-brutal">
+        <div className="flex flex-col gap-1 border-b-2 border-black bg-brand-yellow px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-heading text-lg font-extrabold">REQUEST LOCATIONS</h2>
+            <p className="text-xs font-bold text-black/60">Select a marker to inspect a request</p>
+          </div>
+          <span className="font-mono text-xs font-extrabold">{mapMarkers.length} mapped / {filtered.length} requests</span>
+        </div>
+        {mapMarkers.length > 0 ? (
+          <MapView center={[20.2961, 85.8245]} className="h-[340px] w-full sm:h-[440px]" markers={mapMarkers} fitMarkers />
+        ) : (
+          <div className="flex h-44 items-center justify-center px-5 text-center text-sm font-bold text-black/55">
+            No requests with valid map coordinates match the current filters.
+          </div>
+        )}
+      </section>
 
       {/* Table Representation */}
       <div className="bg-white card-brutal-lg rounded-3xl overflow-hidden border-2 border-black">

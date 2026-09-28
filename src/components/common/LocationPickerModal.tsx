@@ -1,209 +1,233 @@
-import { useState } from 'react';
-import { MapPin, Search, Check, Navigation, X } from 'lucide-react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { LoaderCircle, LocateFixed, MapPin, Search, X } from 'lucide-react';
+import MapView, { type MapPosition } from '../map/MapView';
+import type { RequestLocation } from '../../types';
 
 interface LocationPickerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelectLocation: (locationString: string, coords?: { lat: number; lng: number }) => void;
+  onSelectLocation: (location: RequestLocation) => void;
   initialLocation?: string;
+  initialCoordinates?: MapPosition;
 }
 
-const PRESET_LOCATIONS = [
-  { name: 'Kalahandi, Bhawanipatna Zone 4', district: 'Kalahandi', lat: 19.904, lng: 82.802, status: 'High Demand' },
-  { name: 'Koraput, Jeypore Main Road', district: 'Koraput', lat: 18.812, lng: 82.713, status: 'Active Hotspot' },
-  { name: 'Malkangiri, Block B Hospital Rd', district: 'Malkangiri', lat: 18.343, lng: 81.895, status: 'Critical Area' },
-  { name: 'Rayagada, Gunupur Junction', district: 'Rayagada', lat: 19.167, lng: 83.416, status: 'Moderate' },
-  { name: 'Nuapada, Khariar Road Market', district: 'Nuapada', lat: 20.401, lng: 82.521, status: 'Moderate' },
-  { name: 'Bhubaneswar, Nayapalli Sector 3', district: 'Bhubaneswar', lat: 20.296, lng: 85.824, status: 'Active Hotspot' },
-  { name: 'Cuttack, Badambadi Bus Stand Area', district: 'Cuttack', lat: 20.462, lng: 85.882, status: 'High Demand' },
-  { name: 'Bolangir, Titilagarh Chowk', district: 'Bolangir', lat: 20.715, lng: 83.489, status: 'Normal' },
-];
+interface GeocodingResult {
+  lat: string;
+  lon: string;
+  display_name: string;
+}
+
+let nominatimQueue = Promise.resolve();
+let lastNominatimRequestAt = 0;
+
+async function requestNominatim(url: string, signal: AbortSignal): Promise<Response> {
+  const queuedRequest = nominatimQueue.then(async () => {
+    const delay = Math.max(0, 1100 - (Date.now() - lastNominatimRequestAt));
+    if (delay) await new Promise(resolve => window.setTimeout(resolve, delay));
+    if (signal.aborted) throw new DOMException('Request aborted', 'AbortError');
+    lastNominatimRequestAt = Date.now();
+    return fetch(url, { signal, headers: { Accept: 'application/json' } });
+  });
+  nominatimQueue = queuedRequest.then(() => undefined, () => undefined);
+  return queuedRequest;
+}
+
+function isValidPosition(position: MapPosition): boolean {
+  return Number.isFinite(position.latitude) && Number.isFinite(position.longitude) &&
+    position.latitude >= -90 && position.latitude <= 90 &&
+    position.longitude >= -180 && position.longitude <= 180;
+}
 
 export default function LocationPickerModal({
   isOpen,
   onClose,
   onSelectLocation,
   initialLocation = '',
+  initialCoordinates,
 }: LocationPickerModalProps) {
+  const [position, setPosition] = useState<MapPosition | undefined>(() => initialCoordinates);
+  const [center, setCenter] = useState<[number, number]>(() => initialCoordinates
+    ? [initialCoordinates.latitude, initialCoordinates.longitude]
+    : [20.2961, 85.8245]);
+  const [address, setAddress] = useState(() => initialLocation);
   const [search, setSearch] = useState('');
-  const [selected, setSelected] = useState(PRESET_LOCATIONS[0]);
-  const [customText, setCustomText] = useState(initialLocation);
+  const [searching, setSearching] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const [reverseGeocoding, setReverseGeocoding] = useState(false);
+  const [error, setError] = useState('');
+  const reverseAbort = useRef<AbortController | null>(null);
+
+  useEffect(() => () => reverseAbort.current?.abort(), []);
 
   if (!isOpen) return null;
 
-  const filtered = PRESET_LOCATIONS.filter(
-    l => l.name.toLowerCase().includes(search.toLowerCase()) || l.district.toLowerCase().includes(search.toLowerCase())
-  );
+  const reverseGeocode = async (nextPosition: MapPosition) => {
+    reverseAbort.current?.abort();
+    const controller = new AbortController();
+    reverseAbort.current = controller;
+    setReverseGeocoding(true);
+    setError('');
+    try {
+      const params = new URLSearchParams({
+        format: 'jsonv2',
+        lat: String(nextPosition.latitude),
+        lon: String(nextPosition.longitude),
+        zoom: '18',
+        addressdetails: '1',
+      });
+      const contactEmail = import.meta.env.VITE_NOMINATIM_EMAIL?.trim();
+      if (contactEmail) params.set('email', contactEmail);
+      const response = await requestNominatim(
+        `https://nominatim.openstreetmap.org/reverse?${params}`,
+        controller.signal,
+      );
+      if (!response.ok) throw new Error('Address lookup is temporarily unavailable.');
+      const result = await response.json() as { display_name?: string };
+      if (!controller.signal.aborted) setAddress(result.display_name || 'Address unavailable for this location');
+    } catch (lookupError) {
+      if (!controller.signal.aborted) {
+        setAddress('Address unavailable for this location');
+        setError(lookupError instanceof Error ? lookupError.message : 'Could not look up this address.');
+      }
+    } finally {
+      if (!controller.signal.aborted) setReverseGeocoding(false);
+    }
+  };
+
+  const selectPosition = (nextPosition: MapPosition, knownAddress?: string, recenter = false) => {
+    if (!isValidPosition(nextPosition)) {
+      setError('The selected coordinates are not valid. Please choose another point.');
+      return;
+    }
+    setPosition(nextPosition);
+    if (recenter) setCenter([nextPosition.latitude, nextPosition.longitude]);
+    if (knownAddress) {
+      reverseAbort.current?.abort();
+      setReverseGeocoding(false);
+      setAddress(knownAddress);
+      setError('');
+    } else {
+      setAddress('');
+      void reverseGeocode(nextPosition);
+    }
+  };
+
+  const handleSearch = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const query = search.trim();
+    if (!query) return;
+    setSearching(true);
+    setError('');
+    const controller = new AbortController();
+    try {
+      const params = new URLSearchParams({ format: 'jsonv2', limit: '1', q: query });
+      const contactEmail = import.meta.env.VITE_NOMINATIM_EMAIL?.trim();
+      if (contactEmail) params.set('email', contactEmail);
+      const response = await requestNominatim(
+        `https://nominatim.openstreetmap.org/search?${params}`,
+        controller.signal,
+      );
+      if (!response.ok) throw new Error('Location search is temporarily unavailable.');
+      const results = await response.json() as GeocodingResult[];
+      const match = results[0];
+      if (!match) {
+        setError('No matching location found. Try a nearby place or a more specific address.');
+        return;
+      }
+      selectPosition({ latitude: Number(match.lat), longitude: Number(match.lon) }, match.display_name, true);
+    } catch (searchError) {
+      setError(searchError instanceof Error ? searchError.message : 'Could not search for this location.');
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const handleCurrentLocation = () => {
+    setError('');
+    if (!navigator.geolocation) {
+      setError('This browser does not support location services.');
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      result => {
+        setLocating(false);
+        selectPosition({ latitude: result.coords.latitude, longitude: result.coords.longitude }, undefined, true);
+      },
+      geolocationError => {
+        setLocating(false);
+        const messages: Record<number, string> = {
+          1: 'Location permission was denied. Allow location access in your browser and try again.',
+          2: 'Your current location could not be determined. Try again or search for an address.',
+          3: 'Finding your location timed out. Try again when you have a clearer GPS signal.',
+        };
+        setError(messages[geolocationError.code] || 'Could not get your current location.');
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 },
+    );
+  };
 
   const handleConfirm = () => {
-    const locText = customText.trim() || selected.name;
-    onSelectLocation(locText, { lat: selected.lat, lng: selected.lng });
+    if (!position || !isValidPosition(position)) {
+      setError('Select a point on the map before continuing.');
+      return;
+    }
+    onSelectLocation({
+      ...position,
+      address: address.trim() || 'Address unavailable for this location',
+    });
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-      <div
-        className="bg-white card-brutal-xl rounded-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150"
-        onClick={e => e.stopPropagation()}
-      >
-        {/* Modal Header */}
-        <div className="bg-brand-yellow p-4 md:p-5 border-b-2 border-black flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 bg-black border-2 border-black rounded-lg flex items-center justify-center text-brand-yellow">
-              <MapPin size={18} />
-            </div>
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/60 p-3 backdrop-blur-xs sm:p-5">
+      <div className="flex max-h-[94vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border-2 border-black bg-white shadow-brutal-xl" onClick={event => event.stopPropagation()}>
+        <div className="flex items-center justify-between border-b-2 border-black bg-brand-yellow p-4 md:p-5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg border-2 border-black bg-black text-brand-yellow"><MapPin size={18} /></div>
             <div>
-              <h3 className="font-heading font-extrabold text-lg leading-tight">SELECT ISSUE LOCATION</h3>
-              <p className="text-xs font-bold text-black/60">Pinpoint coordinates and district block</p>
+              <h3 className="font-heading text-lg font-extrabold leading-tight">SELECT PROBLEM LOCATION</h3>
+              <p className="text-xs font-bold text-black/60">Search, click the map, or move the pin</p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 bg-white border-2 border-black rounded-lg flex items-center justify-center font-extrabold hover:bg-black hover:text-white transition-colors"
-          >
-            <X size={16} />
-          </button>
+          <button type="button" onClick={onClose} aria-label="Close location picker" className="flex h-9 w-9 items-center justify-center rounded-lg border-2 border-black bg-white hover:bg-black hover:text-white"><X size={17} /></button>
         </div>
 
-        {/* Modal Body */}
-        <div className="p-5 overflow-y-auto space-y-4 flex-1">
-          {/* Custom Input */}
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider mb-1.5">
-              Specific Address / Landmark Description
-            </label>
-            <input
-              type="text"
-              value={customText}
-              onChange={e => setCustomText(e.target.value)}
-              placeholder="e.g. Near Panchayat Office, Block 4, Ward 12"
-              className="w-full border-2 border-black rounded-xl px-4 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-black"
-            />
+        <div className="space-y-3 overflow-y-auto p-4 md:p-5">
+          <form onSubmit={handleSearch} className="flex flex-col gap-2 sm:flex-row">
+            <label htmlFor="location-search" className="sr-only">Search address or place</label>
+            <div className="relative flex-1">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-black/50" />
+              <input id="location-search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Search address, landmark, or place" className="w-full rounded-xl border-2 border-black bg-gray-50 py-2.5 pl-9 pr-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-black" />
+            </div>
+            <button type="submit" disabled={searching || !search.trim()} className="btn-brutal-secondary rounded-xl px-4 py-2 text-xs font-extrabold disabled:opacity-50">{searching ? <LoaderCircle size={15} className="animate-spin" /> : 'Search location'}</button>
+            <button type="button" onClick={handleCurrentLocation} disabled={locating} className="btn-brutal-primary inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-extrabold disabled:opacity-50">
+              {locating ? <LoaderCircle size={15} className="animate-spin" /> : <LocateFixed size={15} />}
+              <span>{locating ? 'Finding...' : 'Use My Current Location'}</span>
+            </button>
+          </form>
+
+          <div className="overflow-hidden rounded-xl border-2 border-black">
+            <MapView center={center} className="h-64 w-full sm:h-80" selectedPosition={position} onMapClick={nextPosition => selectPosition(nextPosition)} onPositionChange={nextPosition => selectPosition(nextPosition)} />
           </div>
 
-          {/* Interactive Mock Map Canvas */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-xs font-bold uppercase tracking-wider">Interactive Geographic Grid</span>
-              <span className="text-[11px] font-mono font-bold text-black/60">
-                GPS: {selected.lat.toFixed(4)}° N, {selected.lng.toFixed(4)}° E
-              </span>
-            </div>
-
-            <div className="relative bg-slate-900 border-2 border-black rounded-xl h-52 overflow-hidden shadow-inner flex items-center justify-center">
-              {/* Grid Lines */}
-              <div
-                className="absolute inset-0 opacity-20"
-                style={{
-                  backgroundImage: 'linear-gradient(#ffe17c 1px, transparent 1px), linear-gradient(90deg, #ffe17c 1px, transparent 1px)',
-                  backgroundSize: '24px 24px',
-                }}
-              />
-
-              {/* Geographic Contour Mock Circles */}
-              <div className="absolute w-72 h-72 rounded-full border border-brand-yellow/30 animate-pulse" />
-              <div className="absolute w-44 h-44 rounded-full border border-dashed border-brand-yellow/50" />
-
-              {/* Map Hotspot Pins */}
-              {PRESET_LOCATIONS.map((loc, idx) => {
-                const isCurrent = selected.name === loc.name;
-                const top = 25 + (idx * 27) % 55;
-                const left = 15 + (idx * 31) % 70;
-                return (
-                  <button
-                    key={loc.name}
-                    onClick={() => {
-                      setSelected(loc);
-                      setCustomText(loc.name);
-                    }}
-                    style={{ top: `${top}%`, left: `${left}%` }}
-                    className={`absolute -translate-x-1/2 -translate-y-1/2 transition-transform duration-200 ${
-                      isCurrent ? 'scale-125 z-20' : 'scale-90 hover:scale-110 z-10'
-                    }`}
-                    title={loc.name}
-                  >
-                    <div
-                      className={`flex items-center gap-1 px-2 py-1 rounded-lg border-2 border-black font-extrabold text-[10px] shadow-brutal-sm whitespace-nowrap ${
-                        isCurrent ? 'bg-brand-yellow text-black ring-2 ring-white' : 'bg-white text-black'
-                      }`}
-                    >
-                      <MapPin size={10} className={isCurrent ? 'text-black fill-black' : 'text-red-500'} />
-                      <span>{loc.district}</span>
-                    </div>
-                  </button>
-                );
-              })}
-
-              <div className="absolute bottom-2 left-3 bg-black/80 backdrop-blur-xs border border-white/20 px-2.5 py-1 rounded-md text-[10px] font-mono text-brand-yellow">
-                ● Live GIS Telemetry Active
+          <div className="rounded-xl border-2 border-black bg-gray-50 p-3.5">
+            <div className="flex items-center gap-2 text-xs font-extrabold uppercase"><MapPin size={15} className="text-red-600" />Selected Location{reverseGeocoding && <LoaderCircle size={13} className="animate-spin" aria-label="Looking up address" />}</div>
+            {position ? (
+              <div className="mt-2 space-y-1 text-xs">
+                <p className="font-semibold leading-relaxed">Address: {address || 'Looking up address...'}</p>
+                <p className="font-mono text-black/60">Latitude: {position.latitude.toFixed(6)} | Longitude: {position.longitude.toFixed(6)}</p>
               </div>
-            </div>
+            ) : <p className="mt-1 text-xs font-medium text-black/60">Choose a point on the map to place your pin.</p>}
           </div>
-
-          {/* District Quick Selector */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-bold uppercase tracking-wider">Recommended BRICS / Odisha Locations</span>
-              <div className="relative w-48">
-                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-black/40" />
-                <input
-                  type="text"
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  placeholder="Filter district..."
-                  className="w-full pl-7 pr-2 py-1 bg-gray-50 border-2 border-black rounded-lg text-xs font-bold focus:outline-none"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-36 overflow-y-auto scrollbar-thin pr-1">
-              {filtered.map(loc => {
-                const isSelected = selected.name === loc.name;
-                return (
-                  <button
-                    key={loc.name}
-                    onClick={() => {
-                      setSelected(loc);
-                      setCustomText(loc.name);
-                    }}
-                    className={`p-2.5 rounded-xl border-2 text-left flex items-start justify-between gap-2 transition-all ${
-                      isSelected
-                        ? 'bg-brand-yellow border-black shadow-brutal-sm'
-                        : 'bg-white border-black/20 hover:border-black'
-                    }`}
-                  >
-                    <div>
-                      <p className="font-bold text-xs leading-snug">{loc.name}</p>
-                      <p className="text-[10px] font-bold text-black/50 mt-0.5">{loc.district} District</p>
-                    </div>
-                    {isSelected && <Check size={14} className="shrink-0 text-black mt-0.5" />}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          {error && <p role="alert" className="rounded-lg border border-red-400 bg-red-50 px-3 py-2 text-xs font-bold text-red-800">{error}</p>}
         </div>
 
-        {/* Modal Footer */}
-        <div className="bg-gray-50 p-4 border-t-2 border-black flex items-center justify-between">
-          <div className="flex items-center gap-2 text-xs font-bold text-black/70">
-            <Navigation size={14} className="text-black" />
-            <span>Selected: {customText.trim() || selected.name}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={onClose}
-              className="btn-brutal-secondary px-4 py-2 text-xs rounded-xl font-bold"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleConfirm}
-              className="btn-brutal-primary px-5 py-2 text-xs rounded-xl font-extrabold"
-            >
-              Confirm Location &rarr;
-            </button>
+        <div className="flex items-center justify-between gap-3 border-t-2 border-black bg-gray-50 p-4">
+          <p className="hidden text-[11px] font-bold text-black/60 sm:block">Map tiles &amp; address search by OpenStreetMap</p>
+          <div className="ml-auto flex gap-2">
+            <button type="button" onClick={onClose} className="btn-brutal-secondary rounded-xl px-4 py-2 text-xs font-bold">Cancel</button>
+            <button type="button" onClick={handleConfirm} disabled={!position} className="btn-brutal-primary rounded-xl px-5 py-2 text-xs font-extrabold disabled:opacity-50">Confirm Location</button>
           </div>
         </div>
       </div>

@@ -57,6 +57,12 @@ export interface OfficialResponse {
   estimatedResolution?: string;
 }
 
+export interface RequestLocation {
+  latitude: number;
+  longitude: number;
+  address: string;
+}
+
 export interface CitizenRequest {
   id: string;
   userId: string;
@@ -64,6 +70,7 @@ export interface CitizenRequest {
   category: Category;
   description: string;
   location: string;
+  locationDetails?: RequestLocation;
   coordinates?: { lat: number; lng: number };
   language: string;
   imageUrl?: string;

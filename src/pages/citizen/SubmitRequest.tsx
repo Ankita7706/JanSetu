@@ -14,7 +14,7 @@ import { authService } from '../../services/authService';
 import { requestService } from '../../services/requestService';
 import { aiService } from '../../services/aiService';
 import { sendRequestConfirmationEmail } from '../../services/emailService';
-import type { Category, AIAnalysis, Severity, PriorityLevel } from '../../types';
+import type { Category, AIAnalysis, Severity, PriorityLevel, RequestLocation } from '../../types';
 import LocationPickerModal from '../../components/common/LocationPickerModal';
 import AudioVisualizer from '../../components/common/AudioVisualizer';
 import PriorityBadge from '../../components/common/PriorityBadge';
@@ -57,10 +57,7 @@ export default function SubmitRequest() {
   const [category, setCategory] = useState<Category>(initialCat);
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState(user.location || 'Kalahandi, Bhawanipatna Zone 4');
-  const [coordinates, setCoordinates] = useState<{ lat: number; lng: number } | undefined>({
-    lat: 19.904,
-    lng: 82.802,
-  });
+  const [selectedLocation, setSelectedLocation] = useState<RequestLocation | undefined>();
   const [language, setLanguage] = useState(user.language || 'Odia');
   const [severity, setSeverity] = useState<Severity>('high');
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -106,7 +103,7 @@ export default function SubmitRequest() {
 
   const handleStartAnalysis = async () => {
     const textToAnalyze = description.trim() || voiceTranscription;
-    if (!textToAnalyze) return;
+    if (!textToAnalyze || !selectedLocation) return;
 
     setStep('analyzing');
     setAnalysisProgress(15);
@@ -132,7 +129,7 @@ export default function SubmitRequest() {
   };
 
   const handleFinalSubmit = () => {
-    if (!aiResult) return;
+    if (!aiResult || !selectedLocation) return;
     const prio: PriorityLevel = severity === 'critical' || severity === 'high' ? 'high' : 'medium';
     const newReq = requestService.create(
       user.id,
@@ -145,7 +142,8 @@ export default function SubmitRequest() {
       inputMode === 'voice',
       voiceTranscription || undefined,
       prio,
-      coordinates
+      { lat: selectedLocation.latitude, lng: selectedLocation.longitude },
+      selectedLocation,
     );
 
     setCreatedRequestId(newReq.id);
@@ -331,8 +329,13 @@ export default function SubmitRequest() {
 
             <div className="flex items-center gap-2 text-xs font-bold text-black/70">
               <MapPin size={14} className="text-red-500" />
-              <span>Location: {location}</span>
+              <span>Location: {selectedLocation?.address || location}</span>
             </div>
+            {selectedLocation && (
+              <p className="pl-5 text-[10px] font-mono font-bold text-black/50">
+                Latitude: {selectedLocation.latitude.toFixed(6)} | Longitude: {selectedLocation.longitude.toFixed(6)}
+              </p>
+            )}
 
             {imagePreview && (
               <div>
@@ -489,14 +492,14 @@ export default function SubmitRequest() {
           {/* Location Picker */}
           <div>
             <label className="block text-xs font-extrabold uppercase tracking-widest mb-2">
-              3. Location & Ward *
+              3. Select Problem Location *
             </label>
             <div className="flex items-center gap-2">
               <input
                 type="text"
                 value={location}
-                onChange={e => setLocation(e.target.value)}
-                placeholder="District, Block, Ward..."
+                readOnly
+                placeholder="Choose the exact issue location on the map"
                 className="flex-1 border-2 border-black rounded-xl px-4 py-3 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-black bg-white"
               />
               <button
@@ -506,13 +509,18 @@ export default function SubmitRequest() {
                 title="Select on Map"
               >
                 <MapPin size={15} />
-                <span>Map Pin</span>
+                <span>{selectedLocation ? 'Change Pin' : 'Map Pin'}</span>
               </button>
             </div>
-            {coordinates && (
-              <p className="text-[10px] font-mono font-bold text-black/50 mt-1">
-                GPS Coords: {coordinates.lat.toFixed(3)}° N, {coordinates.lng.toFixed(3)}° E
-              </p>
+            {selectedLocation ? (
+              <div className="mt-2 rounded-lg border border-black/20 bg-gray-50 p-2.5 text-[10px]">
+                <p className="font-bold text-black">Selected: {selectedLocation.address}</p>
+                <p className="mt-1 font-mono font-bold text-black/50">
+                  Latitude: {selectedLocation.latitude.toFixed(6)} | Longitude: {selectedLocation.longitude.toFixed(6)}
+                </p>
+              </div>
+            ) : (
+              <p className="mt-1 text-[10px] font-bold text-black/50">Place a map pin to attach the exact problem location.</p>
             )}
           </div>
 
@@ -614,7 +622,7 @@ export default function SubmitRequest() {
           <button
             type="button"
             onClick={handleStartAnalysis}
-            disabled={(!description.trim() && !voiceRecorded) || !location.trim()}
+            disabled={(!description.trim() && !voiceRecorded) || !selectedLocation}
             className="btn-brutal-primary w-full py-4 rounded-2xl text-sm font-extrabold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             <Sparkles size={18} />
@@ -625,19 +633,23 @@ export default function SubmitRequest() {
               * Please enter a description or complete a voice recording to proceed.
             </p>
           )}
+          {!selectedLocation && (
+            <p className="mt-2 text-center text-xs font-bold text-black/50">* Please select the problem location on the map.</p>
+          )}
         </div>
       </div>
 
       {/* Location Modal */}
-      <LocationPickerModal
+      {locationModalOpen && <LocationPickerModal
         isOpen={locationModalOpen}
         onClose={() => setLocationModalOpen(false)}
         initialLocation={location}
-        onSelectLocation={(loc, coords) => {
-          setLocation(loc);
-          if (coords) setCoordinates(coords);
+        initialCoordinates={selectedLocation}
+        onSelectLocation={selected => {
+          setSelectedLocation(selected);
+          setLocation(selected.address);
         }}
-      />
+      />}
     </div>
   );
 }

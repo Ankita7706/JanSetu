@@ -97,7 +97,7 @@ export default function GovernmentLayout() {
     language: rawUser?.language || 'English',
   };
 
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.matchMedia('(min-width: 640px)').matches);
   const [globalSearch, setGlobalSearch] = useState('');
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>(MOCK_NOTIFICATIONS);
@@ -131,19 +131,19 @@ export default function GovernmentLayout() {
       {/* Neo-Brutalist Sidebar */}
       <aside
         className={`${
-          sidebarOpen ? 'w-64' : 'w-20'
+          sidebarOpen ? 'w-14 sm:w-64' : 'w-14 sm:w-20'
         } bg-brand-charcoal text-white flex flex-col transition-all duration-300 shrink-0 h-screen sticky top-0 border-r-2 border-black z-30 select-none`}
       >
         {/* Sidebar Brand Header */}
-        <div className="h-18 flex items-center px-4 border-b-2 border-black bg-brand-yellow text-black">
-          <Link to="/" className="flex items-center gap-2.5 cursor-pointer overflow-hidden">
+        <div className="h-18 flex items-center justify-center px-1 sm:justify-start sm:px-4 border-b-2 border-black bg-brand-yellow text-black">
+          <Link to="/" className="flex items-center justify-center gap-2.5 cursor-pointer overflow-hidden sm:justify-start">
             <div className="w-9 h-9 bg-black flex items-center justify-center border-2 border-black shrink-0 shadow-brutal-sm">
               <svg className="w-5 h-5 fill-brand-yellow" viewBox="0 0 24 24">
                 <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
               </svg>
             </div>
             {sidebarOpen && (
-              <div className="flex flex-col leading-none">
+              <div className="hidden flex-col leading-none sm:flex">
                 <span className="font-heading font-extrabold text-base tracking-tight text-black">JANSETU</span>
                 <span className="text-[9px] font-extrabold tracking-widest uppercase text-black/75 mt-0.5">
                   MP Intelligence
@@ -154,7 +154,7 @@ export default function GovernmentLayout() {
 
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="ml-auto w-7 h-7 bg-white border-2 border-black rounded-lg flex items-center justify-center text-black font-extrabold shadow-brutal-sm hover:bg-black hover:text-white transition-colors cursor-pointer shrink-0"
+            className="ml-auto hidden h-7 w-7 shrink-0 items-center justify-center rounded-lg border-2 border-black bg-white font-extrabold text-black shadow-brutal-sm transition-colors hover:bg-black hover:text-white sm:flex"
             title={sidebarOpen ? 'Collapse Sidebar' : 'Expand Sidebar'}
           >
             {sidebarOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
@@ -162,22 +162,22 @@ export default function GovernmentLayout() {
         </div>
 
         {/* Navigation Items List */}
-        <nav className="flex-1 py-4 overflow-y-auto scrollbar-thin space-y-1.5 px-3">
+        <nav className="flex-1 space-y-1.5 overflow-y-auto px-1 py-4 scrollbar-thin sm:px-3">
           {navItems.map(item => (
             <NavLink
               key={item.to}
               to={item.to}
-              title={!sidebarOpen ? item.label : undefined}
+              title={item.label}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-xs font-extrabold border-2 ${
+                `flex items-center justify-center gap-3 rounded-xl border-2 px-0 py-2.5 text-xs font-extrabold transition-all sm:justify-start sm:px-3 ${
                   isActive
                     ? 'bg-brand-yellow text-black border-black shadow-brutal-sm'
                     : 'text-brand-sage border-transparent hover:bg-white/10 hover:text-white hover:border-white/20'
-                } ${!sidebarOpen ? 'justify-center px-0' : ''}`
+                } ${!sidebarOpen ? 'sm:justify-center sm:px-0' : ''}`
               }
             >
               <span className="shrink-0">{item.icon}</span>
-              {sidebarOpen && <span className="truncate">{item.label}</span>}
+              {sidebarOpen && <span className="hidden truncate sm:block">{item.label}</span>}
             </NavLink>
           ))}
         </nav>
@@ -185,7 +185,7 @@ export default function GovernmentLayout() {
         {/* Official User Profile Footer */}
         <div className="border-t-2 border-black/40 p-3 space-y-2 bg-black/40">
           {sidebarOpen && (
-            <div className="flex items-center gap-2.5 p-2 bg-white/10 border border-white/20 rounded-xl">
+            <div className="hidden items-center gap-2.5 rounded-xl border border-white/20 bg-white/10 p-2 sm:flex">
               <div className="w-8 h-8 bg-brand-yellow text-black border border-black rounded-lg flex items-center justify-center font-heading font-extrabold text-sm shrink-0">
                 {initials}
               </div>
@@ -201,12 +201,10 @@ export default function GovernmentLayout() {
           <button
             onClick={handleLogout}
             title={!sidebarOpen ? 'Sign Out' : undefined}
-            className={`flex items-center gap-2.5 w-full px-3 py-2.5 bg-red-600/80 hover:bg-red-600 text-white rounded-xl border border-red-500 transition-all text-xs font-extrabold cursor-pointer ${
-              !sidebarOpen ? 'justify-center px-0' : ''
-            }`}
+            className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-red-500 bg-red-600/80 px-0 py-2.5 text-xs font-extrabold text-white transition-all hover:bg-red-600 sm:justify-start sm:px-3"
           >
             <LogOut size={14} className="shrink-0" />
-            {sidebarOpen && <span>Sign Out</span>}
+            {sidebarOpen && <span className="hidden sm:inline">Sign Out</span>}
           </button>
         </div>
       </aside>
@@ -214,7 +212,7 @@ export default function GovernmentLayout() {
       {/* Main Content Workspace */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top Intelligence Header Bar */}
-        <header className="h-18 bg-white border-b-2 border-black px-6 flex items-center justify-between gap-4 sticky top-0 z-20">
+        <header className="h-18 bg-white border-b-2 border-black px-3 sm:px-6 flex items-center justify-between gap-4 sticky top-0 z-20">
           {/* Global Search */}
           <form onSubmit={handleSearchSubmit} className="relative flex-1 max-w-md hidden sm:block">
             <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-black/40 pointer-events-none" />
@@ -280,7 +278,7 @@ export default function GovernmentLayout() {
         />
 
         {/* Dashboard Page Route Outlet */}
-        <main className="flex-1 overflow-y-auto p-6 md:p-8 scrollbar-thin">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-6 md:p-8 scrollbar-thin">
           <div className="max-w-7xl mx-auto space-y-6">
             <Outlet />
           </div>

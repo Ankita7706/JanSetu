@@ -17,6 +17,7 @@ import type {
   AIAnalysis,
   OfficialResponse,
   PriorityLevel,
+  RequestLocation,
   User,
 } from '../types';
 import { MOCK_REQUESTS } from '../data/mockData';
@@ -27,17 +28,45 @@ type RequestListener = (requests: CitizenRequest[]) => void;
 const listeners: Set<RequestListener> = new Set();
 let isFirestoreListenerActive = false;
 
+function validCoordinates(value: unknown): value is { lat: number; lng: number } {
+  if (!value || typeof value !== 'object') return false;
+  const point = value as { lat?: unknown; lng?: unknown };
+  return typeof point.lat === 'number' && Number.isFinite(point.lat) && point.lat >= -90 && point.lat <= 90 &&
+    typeof point.lng === 'number' && Number.isFinite(point.lng) && point.lng >= -180 && point.lng <= 180;
+}
+
+function validLocationDetails(value: unknown): value is RequestLocation {
+  if (!value || typeof value !== 'object') return false;
+  const location = value as Partial<RequestLocation>;
+  return typeof location.latitude === 'number' && Number.isFinite(location.latitude) &&
+    location.latitude >= -90 && location.latitude <= 90 &&
+    typeof location.longitude === 'number' && Number.isFinite(location.longitude) &&
+    location.longitude >= -180 && location.longitude <= 180 &&
+    typeof location.address === 'string' && location.address.trim().length > 0;
+}
+
 function normalizeRequest(req: any): CitizenRequest {
   const category = (req.category || 'Roads') as Category;
   const dept = req.department || CATEGORY_DEPARTMENT_MAP[category] || 'Public Works Department (PWD)';
-  const region = req.region || (req.location ? req.location.split(',')[0].trim() : 'Kalahandi');
+  const locationDetails = validLocationDetails(req.locationDetails)
+    ? req.locationDetails
+    : validLocationDetails(req.location) ? req.location : undefined;
+  const location = typeof req.location === 'string'
+    ? req.location
+    : locationDetails?.address || 'Location not provided';
+  const region = req.region || location.split(',')[0].trim() || 'Kalahandi';
 
   return {
     ...req,
     category,
+    location,
     department: dept,
     region,
     status: req.status || 'pending',
+    coordinates: validCoordinates(req.coordinates)
+      ? req.coordinates
+      : locationDetails ? { lat: locationDetails.latitude, lng: locationDetails.longitude } : undefined,
+    locationDetails,
   };
 }
 
@@ -275,7 +304,8 @@ export const requestService = {
     isVoice?: boolean,
     voiceTranscription?: string,
     priority?: PriorityLevel,
-    coordinates?: { lat: number; lng: number }
+    coordinates?: { lat: number; lng: number },
+    locationDetails?: RequestLocation
   ): CitizenRequest {
     const autoDept = CATEGORY_DEPARTMENT_MAP[category] || 'Public Works Department (PWD)';
     const autoRegion = location.split(',')[0].trim() || 'Kalahandi';
@@ -289,7 +319,8 @@ export const requestService = {
       region: autoRegion,
       description,
       location,
-      coordinates,
+      coordinates: validCoordinates(coordinates) ? coordinates : undefined,
+      locationDetails: validLocationDetails(locationDetails) ? locationDetails : undefined,
       language,
       imageUrl,
       status: 'pending',

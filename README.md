@@ -99,6 +99,13 @@ Impact Monitoring
 * Database
 * Data storage
 
+### Maps & Geocoding
+
+* Leaflet and React-Leaflet with OpenStreetMap tiles
+* Nominatim address search and reverse geocoding
+
+The location picker submits searches only when the citizen presses Search and serializes Nominatim requests at approximately one request per second. The browser supplies its normal User-Agent and page Referer; browser JavaScript cannot set a custom User-Agent header. Set the optional, public contact address `VITE_NOMINATIM_EMAIL` in the frontend environment to include it in Nominatim requests. For larger-scale use, follow the current [Nominatim usage policy](https://operations.osmfoundation.org/policies/nominatim/) and consider an approved proxy or hosted geocoding provider with a suitable service policy. No Google Maps services or API keys are used.
+
 ### AI
 
 * Generative AI
