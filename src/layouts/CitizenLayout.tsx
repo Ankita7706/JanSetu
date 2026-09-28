@@ -4,6 +4,7 @@ import { LayoutDashboard, PlusCircle, Mic, ListChecks, User, Bell, LogOut, Menu,
 import { authService } from '../services/authService';
 import { MOCK_NOTIFICATIONS } from '../data/mockData';
 import NotificationDrawer from '../components/common/NotificationDrawer';
+import CitizenFaqAssistant from '../components/assistant/CitizenFaqAssistant';
 import type { AppNotification } from '../types';
 
 const navItems = [
@@ -233,6 +234,8 @@ export default function CitizenLayout() {
           <p>© 2026 Government of Odisha / BRICS Infrastructure Policy Hub</p>
         </div>
       </footer>
+
+      <CitizenFaqAssistant initialLanguage={user?.language || 'Odia'} />
     </div>
   );
 }

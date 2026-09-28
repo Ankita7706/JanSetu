@@ -1,7 +1,10 @@
 import { useNavigate } from 'react-router-dom';
 import HeroCitizenPortal from '../components/HeroCitizenPortal';
+import CitizenFaqAssistant from '../components/assistant/CitizenFaqAssistant';
+import { authService } from '../services/authService';
 export default function LandingPage() {
   const navigate = useNavigate();
+  const faqLanguage = authService.getCurrentUser()?.language || 'English';
 
   return (
     <div className="min-h-screen bg-brand-charcoal text-black font-body">
@@ -417,6 +420,7 @@ export default function LandingPage() {
         </div>
       </footer>
 
+      <CitizenFaqAssistant initialLanguage={faqLanguage} />
     </div>
   );
 }
