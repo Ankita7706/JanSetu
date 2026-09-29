@@ -1,27 +1,26 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate, Link } from 'react-router-dom';
 import {
   LayoutDashboard,
   Table,
   MapPin,
   Award,
-  FolderKanban,
-  Database,
   Bell,
   Search,
   LogOut,
   ChevronLeft,
   ChevronRight,
-  Globe,
   UserCheck,
   Building,
+  Edit3,
   BarChart3,
-  TrendingUp,
+  Globe,
 } from 'lucide-react';
 import { authService } from '../services/authService';
 import { MOCK_NOTIFICATIONS } from '../data/mockData';
 import NotificationDrawer from '../components/common/NotificationDrawer';
-import type { AppNotification } from '../types';
+import GovProfileModal from '../components/common/GovProfileModal';
+import type { AppNotification, User } from '../types';
 
 const navItems = [
   {
@@ -45,19 +44,9 @@ const navItems = [
     icon: <Table size={18} />,
   },
   {
-    to: '/government/analytics',
-    label: 'Analytics & SLA',
-    icon: <BarChart3 size={18} />,
-  },
-  {
     to: '/government/hotspots',
     label: 'Demand Hotspots',
     icon: <MapPin size={18} />,
-  },
-  {
-    to: '/government/regions',
-    label: 'Region Analysis',
-    icon: <Globe size={18} />,
   },
   {
     to: '/government/recommendations',
@@ -65,42 +54,95 @@ const navItems = [
     icon: <Award size={18} />,
   },
   {
-    to: '/government/projects',
-    label: 'Projects Pipeline',
-    icon: <FolderKanban size={18} />,
+    to: '/government/analytics',
+    label: 'Analytics & SLA',
+    icon: <BarChart3 size={18} />,
   },
   {
-    to: '/government/impact',
-    label: 'Impact Dashboard',
-    icon: <TrendingUp size={18} />,
-  },
-  {
-    to: '/government/datasources',
-    label: 'Data Sources',
-    icon: <Database size={18} />,
+    to: '/government/regions',
+    label: 'Region Analysis',
+    icon: <Globe size={18} />,
   },
 ];
 
 export default function GovernmentLayout() {
   const navigate = useNavigate();
-  const rawUser = authService.getCurrentUser();
-  const user = {
-    id: rawUser?.id || 'gov-user',
-    name: rawUser?.name || 'Government Official',
-    email: rawUser?.email || '',
-    role: rawUser?.role || 'official',
-    department: rawUser?.department || 'Public Works & Governance',
-    designation: rawUser?.designation || 'Government Officer',
-    organization: rawUser?.organization || (rawUser?.designation && rawUser?.department ? `${rawUser.designation} • ${rawUser.department}` : 'Public Administration'),
-    location: rawUser?.location || rawUser?.district || 'Odisha Jurisdiction',
-    district: rawUser?.district || 'State Jurisdiction',
-    language: rawUser?.language || 'English',
-  };
 
-  const [sidebarOpen, setSidebarOpen] = useState(() => window.matchMedia('(min-width: 640px)').matches);
+  const [currentUser, setCurrentUser] = useState<User>(() => {
+    const raw = authService.getCurrentUser();
+
+    return {
+      id: raw?.id || 'gov-user',
+      name: raw?.name || 'Rashmita Panigrahy',
+      email: raw?.email || 'official@demo.com',
+      role: raw?.role || 'official',
+      department: raw?.department || 'Water Resources & Public Health',
+      designation: raw?.designation || 'Assistant Executive Engineer (AEE)',
+      organization:
+        raw?.organization ||
+        `${raw?.designation || 'Assistant Executive Engineer (AEE)'} • ${
+          raw?.department || 'Water Resources & Public Health'
+        }`,
+      location: raw?.location || 'Kalahandi, Odisha',
+      district: raw?.district || 'Kalahandi',
+      language: raw?.language || 'English',
+      employeeId: raw?.employeeId || 'GOV-00-1234',
+    };
+  });
+
+  const [sidebarOpen, setSidebarOpen] = useState(() =>
+    window.matchMedia('(min-width: 640px)').matches
+  );
   const [globalSearch, setGlobalSearch] = useState('');
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [notifications, setNotifications] = useState<AppNotification[]>(MOCK_NOTIFICATIONS);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [notifications, setNotifications] =
+    useState<AppNotification[]>(MOCK_NOTIFICATIONS);
+
+  useEffect(() => {
+    const unsubscribe = authService.subscribe(updated => {
+      if (updated) {
+        setCurrentUser({
+          id: updated.id || 'gov-user',
+          name: updated.name || 'Rashmita Panigrahy',
+          email: updated.email || 'official@demo.com',
+          role: updated.role || 'official',
+          department:
+            updated.department || 'Water Resources & Public Health',
+          designation:
+            updated.designation || 'Assistant Executive Engineer (AEE)',
+          organization:
+            updated.organization ||
+            `${updated.designation || 'Assistant Executive Engineer (AEE)'} • ${
+              updated.department || 'Water Resources & Public Health'
+            }`,
+          location: updated.location || 'Kalahandi, Odisha',
+          district: updated.district || 'Kalahandi',
+          language: updated.language || 'English',
+          employeeId: updated.employeeId || 'GOV-00-1234',
+        });
+      }
+    });
+
+    const handleProfileCustomEvent = (e: any) => {
+      if (e.detail) {
+        setCurrentUser(e.detail);
+      }
+    };
+
+    window.addEventListener(
+      'jansetu_user_profile_updated',
+      handleProfileCustomEvent
+    );
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener(
+        'jansetu_user_profile_updated',
+        handleProfileCustomEvent
+      );
+    };
+  }, []);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -111,20 +153,31 @@ export default function GovernmentLayout() {
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
     if (globalSearch.trim()) {
-      navigate(`/government/requests?search=${encodeURIComponent(globalSearch.trim())}`);
+      navigate(
+        `/government/requests?search=${encodeURIComponent(
+          globalSearch.trim()
+        )}`
+      );
     }
   };
 
   const getInitials = (nameStr: string) => {
-    if (!nameStr) return 'GO';
+    if (!nameStr) return 'RP';
+
     const parts = nameStr.trim().split(/\s+/);
+
     if (parts.length >= 2) {
-      return `${parts[0].charAt(0)}${parts[parts.length - 1].charAt(0)}`.toUpperCase();
+      return `${parts[0].charAt(0)}${
+        parts[parts.length - 1].charAt(0)
+      }`.toUpperCase();
     }
-    return nameStr.slice(0, 2).toUpperCase() || 'GO';
+
+    return nameStr.slice(0, 2).toUpperCase() || 'RP';
   };
-  const initials = getInitials(user.name);
+
+  const initials = getInitials(currentUser.name);
 
   return (
     <div className="min-h-screen flex font-body bg-gray-100 text-black">
@@ -136,15 +189,24 @@ export default function GovernmentLayout() {
       >
         {/* Sidebar Brand Header */}
         <div className="h-18 flex items-center justify-center px-1 sm:justify-start sm:px-4 border-b-2 border-black bg-brand-yellow text-black">
-          <Link to="/" className="flex items-center justify-center gap-2.5 cursor-pointer overflow-hidden sm:justify-start">
+          <Link
+            to="/"
+            className="flex items-center justify-center gap-2.5 cursor-pointer overflow-hidden sm:justify-start"
+          >
             <div className="w-9 h-9 bg-black flex items-center justify-center border-2 border-black shrink-0 shadow-brutal-sm">
-              <svg className="w-5 h-5 fill-brand-yellow" viewBox="0 0 24 24">
+              <svg
+                className="w-5 h-5 fill-brand-yellow"
+                viewBox="0 0 24 24"
+              >
                 <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
               </svg>
             </div>
+
             {sidebarOpen && (
               <div className="hidden flex-col leading-none sm:flex">
-                <span className="font-heading font-extrabold text-base tracking-tight text-black">JANSETU</span>
+                <span className="font-heading font-extrabold text-base tracking-tight text-black">
+                  JANSETU
+                </span>
                 <span className="text-[9px] font-extrabold tracking-widest uppercase text-black/75 mt-0.5">
                   MP Intelligence
                 </span>
@@ -157,7 +219,11 @@ export default function GovernmentLayout() {
             className="ml-auto hidden h-7 w-7 shrink-0 items-center justify-center rounded-lg border-2 border-black bg-white font-extrabold text-black shadow-brutal-sm transition-colors hover:bg-black hover:text-white sm:flex"
             title={sidebarOpen ? 'Collapse Sidebar' : 'Expand Sidebar'}
           >
-            {sidebarOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
+            {sidebarOpen ? (
+              <ChevronLeft size={16} />
+            ) : (
+              <ChevronRight size={16} />
+            )}
           </button>
         </div>
 
@@ -177,34 +243,64 @@ export default function GovernmentLayout() {
               }
             >
               <span className="shrink-0">{item.icon}</span>
-              {sidebarOpen && <span className="hidden truncate sm:block">{item.label}</span>}
+              {sidebarOpen && (
+                <span className="hidden truncate sm:block">
+                  {item.label}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>
 
         {/* Official User Profile Footer */}
         <div className="border-t-2 border-black/40 p-3 space-y-2 bg-black/40">
-          {sidebarOpen && (
-            <div className="hidden items-center gap-2.5 rounded-xl border border-white/20 bg-white/10 p-2 sm:flex">
-              <div className="w-8 h-8 bg-brand-yellow text-black border border-black rounded-lg flex items-center justify-center font-heading font-extrabold text-sm shrink-0">
-                {initials}
+          {sidebarOpen ? (
+            <div className="p-2.5 bg-white/10 border border-white/20 rounded-xl space-y-2">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 bg-brand-yellow text-black border border-black rounded-lg flex items-center justify-center font-heading font-extrabold text-sm shrink-0">
+                  {initials}
+                </div>
+
+                <div className="overflow-hidden leading-tight flex-1">
+                  <p className="text-white font-extrabold text-xs truncate">
+                    {currentUser.name}
+                  </p>
+
+                  <p className="text-brand-yellow text-[10px] font-bold truncate">
+                    {currentUser.designation || 'Officer'}
+                  </p>
+                </div>
               </div>
-              <div className="overflow-hidden leading-tight">
-                <p className="text-white font-extrabold text-xs truncate">{user.name}</p>
-                <p className="text-brand-yellow text-[10px] font-bold truncate">
-                  {user.organization || 'MP Official Admin'}
-                </p>
-              </div>
+
+              <button
+                onClick={() => setProfileModalOpen(true)}
+                className="w-full flex items-center justify-center gap-1.5 py-1.5 px-2 bg-brand-yellow text-black rounded-lg text-[10px] font-extrabold border border-black shadow-brutal-xs hover:bg-white transition-all cursor-pointer"
+              >
+                <Edit3 size={11} />
+                <span>Edit Official Profile</span>
+              </button>
             </div>
+          ) : (
+            <button
+              onClick={() => setProfileModalOpen(true)}
+              className="w-8 h-8 mx-auto bg-brand-yellow text-black border border-black rounded-lg flex items-center justify-center font-heading font-extrabold text-sm cursor-pointer hover:scale-105 transition-transform"
+              title="Edit Profile"
+            >
+              <Edit3 size={14} />
+            </button>
           )}
 
           <button
             onClick={handleLogout}
             title={!sidebarOpen ? 'Sign Out' : undefined}
-            className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-red-500 bg-red-600/80 px-0 py-2.5 text-xs font-extrabold text-white transition-all hover:bg-red-600 sm:justify-start sm:px-3"
+            className={`flex items-center gap-2.5 w-full px-3 py-2 bg-red-600/80 hover:bg-red-600 text-white rounded-xl border border-red-500 transition-all text-xs font-extrabold cursor-pointer ${
+              !sidebarOpen ? 'justify-center px-0' : ''
+            }`}
           >
             <LogOut size={14} className="shrink-0" />
-            {sidebarOpen && <span className="hidden sm:inline">Sign Out</span>}
+            {sidebarOpen && (
+              <span className="hidden sm:inline">Sign Out</span>
+            )}
           </button>
         </div>
       </aside>
@@ -214,8 +310,15 @@ export default function GovernmentLayout() {
         {/* Top Intelligence Header Bar */}
         <header className="h-18 bg-white border-b-2 border-black px-3 sm:px-6 flex items-center justify-between gap-4 sticky top-0 z-20">
           {/* Global Search */}
-          <form onSubmit={handleSearchSubmit} className="relative flex-1 max-w-md hidden sm:block">
-            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-black/40 pointer-events-none" />
+          <form
+            onSubmit={handleSearchSubmit}
+            className="relative flex-1 max-w-md hidden sm:block"
+          >
+            <Search
+              size={16}
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-black/40 pointer-events-none"
+            />
+
             <input
               type="text"
               value={globalSearch}
@@ -240,6 +343,7 @@ export default function GovernmentLayout() {
               title="Official Alerts"
             >
               <Bell size={18} />
+
               {unreadCount > 0 && (
                 <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-600 text-white border-2 border-black rounded-full text-[10px] font-extrabold flex items-center justify-center animate-bounce">
                   {unreadCount}
@@ -247,29 +351,58 @@ export default function GovernmentLayout() {
               )}
             </button>
 
-            {/* Official Profile Badge - displays logged in user's name & initials */}
-            <div className="flex items-center gap-2.5 pl-2 border-l-2 border-black/20">
+            {/* Official Profile Badge */}
+            <button
+              onClick={() => setProfileModalOpen(true)}
+              className="flex items-center gap-2.5 pl-2 border-l-2 border-black/20 hover:opacity-80 transition-opacity cursor-pointer text-left"
+              title="Click to edit profile"
+            >
               <div className="w-9 h-9 bg-brand-yellow border-2 border-black rounded-xl flex items-center justify-center font-heading font-extrabold text-sm shadow-brutal-sm">
                 {initials}
               </div>
+
               <div className="hidden md:block leading-none text-left">
-                <p className="font-heading font-extrabold text-xs">{user.name}</p>
+                <div className="flex items-center gap-1">
+                  <p className="font-heading font-extrabold text-xs">
+                    {currentUser.name}
+                  </p>
+                  <Edit3 size={10} className="text-black/60" />
+                </div>
+
                 <p className="text-[10px] font-bold text-black/60 uppercase tracking-wider mt-0.5">
-                  {user.organization || 'MP Official Admin'}
+                  {currentUser.designation ||
+                    currentUser.organization ||
+                    'Official Admin'}
                 </p>
               </div>
-            </div>
+            </button>
           </div>
         </header>
+
+        {/* Profile Edit Modal */}
+        <GovProfileModal
+          isOpen={profileModalOpen}
+          onClose={() => setProfileModalOpen(false)}
+          onProfileUpdated={updated => setCurrentUser(updated)}
+        />
 
         {/* Notifications Drawer */}
         <NotificationDrawer
           isOpen={notificationsOpen}
           onClose={() => setNotificationsOpen(false)}
           notifications={notifications}
-          onMarkAllAsRead={() => setNotifications(prev => prev.map(n => ({ ...n, read: true })))}
+          onMarkAllAsRead={() =>
+            setNotifications(prev =>
+              prev.map(n => ({ ...n, read: true }))
+            )
+          }
           onNotificationClick={notif => {
-            setNotifications(prev => prev.map(n => (n.id === notif.id ? { ...n, read: true } : n)));
+            setNotifications(prev =>
+              prev.map(n =>
+                n.id === notif.id ? { ...n, read: true } : n
+              )
+            );
+
             if (notif.link) {
               setNotificationsOpen(false);
               navigate(notif.link);

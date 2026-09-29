@@ -8,6 +8,10 @@ import {
   Send,
   Sparkles,
   ArrowUpDown,
+  Mic,
+  Building,
+  MapPin,
+  Calendar,
 } from 'lucide-react';
 import { requestService, useCitizenRequests } from '../../services/requestService';
 import { authService } from '../../services/authService';
@@ -16,6 +20,7 @@ import PriorityBadge from '../../components/common/PriorityBadge';
 import CategoryBadge from '../../components/common/CategoryBadge';
 import MapView, { type MapViewMarker } from '../../components/map/MapView';
 import type { CitizenRequest, RequestStatus } from '../../types';
+import { DEPARTMENTS, DISTRICTS } from '../../types';
 
 export default function GovRequests() {
   const [searchParams] = useSearchParams();
@@ -23,10 +28,13 @@ export default function GovRequests() {
 
   const { requests, loading } = useCitizenRequests();
   const [search, setSearch] = useState(initialSearch);
-  const [statusFilter, setStatusFilter] = useState<RequestStatus | 'all'>('all');
-  const [categoryFilter, setCategoryFilter] = useState<string>('All');
-  const [priorityFilter, setPriorityFilter] = useState<string>('All');
+  const [departmentFilter, setDepartmentFilter] = useState<string>('All');
   const [regionFilter, setRegionFilter] = useState<string>('All');
+  const [categoryFilter, setCategoryFilter] = useState<string>('All');
+  const [severityFilter, setSeverityFilter] = useState<string>('All');
+  const [statusFilter, setStatusFilter] = useState<RequestStatus | 'all'>('all');
+  const [dateFilter, setDateFilter] = useState<string>('All');
+  const [slaFilter, setSlaFilter] = useState<string>('All');
   const [sortBy, setSortBy] = useState<'date' | 'priority' | 'affected'>('date');
 
   // Modal detail & live status updater
@@ -67,20 +75,59 @@ export default function GovRequests() {
     }, 600);
   };
 
-  // Filtering
+  // 7 Filters implementation
   const filtered = requests
     .filter(req => {
-      if (statusFilter !== 'all' && req.status !== statusFilter) return false;
+      // 1. Department
+      if (departmentFilter !== 'All') {
+        const reqDept = (req.department || '').toLowerCase();
+        const targetDept = departmentFilter.toLowerCase();
+        if (!reqDept.includes(targetDept) && !targetDept.includes(reqDept)) return false;
+      }
+      // 2. Region
+      if (regionFilter !== 'All') {
+        const loc = (req.location + ' ' + (req.region || '')).toLowerCase();
+        if (!loc.includes(regionFilter.toLowerCase())) return false;
+      }
+      // 3. Category
       if (categoryFilter !== 'All' && req.category !== categoryFilter) return false;
-      if (priorityFilter !== 'All' && req.priority !== priorityFilter.toLowerCase()) return false;
-      if (regionFilter !== 'All' && !req.location.toLowerCase().includes(regionFilter.toLowerCase())) return false;
+      // 4. Severity / Priority
+      if (severityFilter !== 'All' && req.priority !== severityFilter.toLowerCase() && req.aiAnalysis?.severity !== severityFilter.toLowerCase()) {
+        return false;
+      }
+      // 5. Status
+      if (statusFilter !== 'all') {
+        if (statusFilter === 'pending' && req.status !== 'pending' && req.status !== 'new') return false;
+        if (statusFilter !== 'pending' && req.status !== statusFilter) return false;
+      }
+      // 6. Date
+      if (dateFilter !== 'All') {
+        const reqDate = new Date(req.createdAt || 0);
+        const now = new Date();
+        if (dateFilter === 'Today') {
+          if (reqDate.toDateString() !== now.toDateString()) return false;
+        } else if (dateFilter === 'This Week') {
+          const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          if (reqDate < weekAgo) return false;
+        } else if (dateFilter === 'This Month') {
+          if (reqDate.getMonth() !== now.getMonth() || reqDate.getFullYear() !== now.getFullYear()) return false;
+        }
+      }
+      // 7. SLA
+      if (slaFilter !== 'All') {
+        const isCriticalOrOld = (req.status === 'pending' || req.status === 'new') && req.priority === 'high';
+        if (slaFilter === 'Breached' && !isCriticalOrOld) return false;
+        if (slaFilter === 'Within SLA' && isCriticalOrOld) return false;
+      }
+      // Search
       if (search.trim()) {
         const q = search.toLowerCase();
         const match =
           req.id.toLowerCase().includes(q) ||
           req.description.toLowerCase().includes(q) ||
           req.location.toLowerCase().includes(q) ||
-          req.category.toLowerCase().includes(q);
+          req.category.toLowerCase().includes(q) ||
+          (req.department && req.department.toLowerCase().includes(q));
         if (!match) return false;
       }
       return true;
@@ -91,7 +138,6 @@ export default function GovRequests() {
       return (b.priority === 'high' ? 2 : 1) - (a.priority === 'high' ? 2 : 1);
     });
 
-  const regions = ['All', 'Bhubaneswar', 'Cuttack', 'Kalahandi', 'Koraput', 'Malkangiri', 'Rayagada', 'Nuapada'];
   const categories = ['All', 'Roads', 'Water', 'Streetlights', 'Drainage', 'Public Transport', 'Schools & Hospitals', 'Electricity', 'Sanitation'];
   const mapMarkers: MapViewMarker[] = filtered.flatMap(req => {
     const point = req.locationDetails
@@ -128,15 +174,15 @@ export default function GovRequests() {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 font-body">
       {/* Header */}
-      <div className="bg-brand-yellow card-brutal rounded-2xl p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-brand-yellow card-brutal rounded-2xl p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-4 border-2 border-black">
         <div>
           <h1 className="font-heading font-extrabold text-3xl md:text-4xl text-black">
-            ALL CITIZEN GRIEVANCES
+            CENTRAL DATABASE OF CITIZEN REQUESTS
           </h1>
           <p className="font-medium text-sm text-black/75 mt-1">
-            Centralized triage queue with live status dispatch and explainable NLP diagnostics.
+            Complete statewide repository of citizen complaints with full filtering by department, region, category, severity, status, date & SLA.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -146,13 +192,13 @@ export default function GovRequests() {
             </span>
           )}
           <div className="flex items-center gap-2 font-mono font-extrabold text-xs bg-black text-brand-yellow px-4 py-2 rounded-xl shadow-brutal-sm">
-            <span>Total Records: {filtered.length}</span>
+            <span>Total Filtered: {filtered.length}</span>
           </div>
         </div>
       </div>
 
-      {/* Filter Toolbar */}
-      <div className="bg-white card-brutal rounded-2xl p-5 space-y-4">
+      {/* Filter Toolbar with All 7 Filters */}
+      <div className="bg-white card-brutal rounded-2xl p-5 space-y-4 border-2 border-black">
         {/* Search & Sort */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="sm:col-span-2 relative">
@@ -161,7 +207,7 @@ export default function GovRequests() {
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Search by Request ID, category, keyword, district..."
+              placeholder="Search by Request ID, category, keyword, department, district..."
               className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border-2 border-black rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-black"
             />
           </div>
@@ -183,68 +229,110 @@ export default function GovRequests() {
           </div>
         </div>
 
-        {/* Dropdown Filters Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-black/10 text-xs font-bold">
-          {/* Status Filter */}
+        {/* 7 Required Filters Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5 pt-3 border-t border-black/10 text-xs font-bold">
+          {/* 1. Department */}
           <div>
-            <label className="block text-[10px] uppercase text-black/60 mb-1">Status</label>
+            <label className="block text-[10px] uppercase text-black/60 mb-1 truncate">Department</label>
             <select
-              value={statusFilter}
-              onChange={e => setStatusFilter(e.target.value as any)}
-              className="w-full bg-gray-50 border-2 border-black rounded-xl px-3 py-2 focus:outline-none"
+              value={departmentFilter}
+              onChange={e => setDepartmentFilter(e.target.value)}
+              className="w-full bg-gray-50 border-2 border-black rounded-xl px-2 py-1.5 focus:outline-none cursor-pointer text-[11px]"
             >
-              <option value="all">All Statuses</option>
-              <option value="pending">Submitted</option>
-              <option value="under_review">Under Review</option>
-              <option value="in_progress">In Progress</option>
-              <option value="resolved">Resolved</option>
-            </select>
-          </div>
-
-          {/* Category Filter */}
-          <div>
-            <label className="block text-[10px] uppercase text-black/60 mb-1">Category</label>
-            <select
-              value={categoryFilter}
-              onChange={e => setCategoryFilter(e.target.value)}
-              className="w-full bg-gray-50 border-2 border-black rounded-xl px-3 py-2 focus:outline-none"
-            >
-              {categories.map(c => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
+              <option value="All">All Depts</option>
+              {DEPARTMENTS.map(d => (
+                <option key={d} value={d}>{d}</option>
               ))}
             </select>
           </div>
 
-          {/* Priority Filter */}
+          {/* 2. Region */}
           <div>
-            <label className="block text-[10px] uppercase text-black/60 mb-1">Priority</label>
+            <label className="block text-[10px] uppercase text-black/60 mb-1 truncate">Region</label>
             <select
-              value={priorityFilter}
-              onChange={e => setPriorityFilter(e.target.value)}
-              className="w-full bg-gray-50 border-2 border-black rounded-xl px-3 py-2 focus:outline-none"
+              value={regionFilter}
+              onChange={e => setRegionFilter(e.target.value)}
+              className="w-full bg-gray-50 border-2 border-black rounded-xl px-2 py-1.5 focus:outline-none cursor-pointer text-[11px]"
             >
-              <option value="All">All Priorities</option>
+              <option value="All">All Regions</option>
+              {DISTRICTS.map(r => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* 3. Category */}
+          <div>
+            <label className="block text-[10px] uppercase text-black/60 mb-1 truncate">Category</label>
+            <select
+              value={categoryFilter}
+              onChange={e => setCategoryFilter(e.target.value)}
+              className="w-full bg-gray-50 border-2 border-black rounded-xl px-2 py-1.5 focus:outline-none cursor-pointer text-[11px]"
+            >
+              {categories.map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* 4. Severity */}
+          <div>
+            <label className="block text-[10px] uppercase text-black/60 mb-1 truncate">Severity</label>
+            <select
+              value={severityFilter}
+              onChange={e => setSeverityFilter(e.target.value)}
+              className="w-full bg-gray-50 border-2 border-black rounded-xl px-2 py-1.5 focus:outline-none cursor-pointer text-[11px]"
+            >
+              <option value="All">All Severity</option>
+              <option value="Critical">Critical</option>
               <option value="High">High</option>
               <option value="Medium">Medium</option>
               <option value="Low">Low</option>
             </select>
           </div>
 
-          {/* Region Filter */}
+          {/* 5. Status */}
           <div>
-            <label className="block text-[10px] uppercase text-black/60 mb-1">Region</label>
+            <label className="block text-[10px] uppercase text-black/60 mb-1 truncate">Status</label>
             <select
-              value={regionFilter}
-              onChange={e => setRegionFilter(e.target.value)}
-              className="w-full bg-gray-50 border-2 border-black rounded-xl px-3 py-2 focus:outline-none"
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value as any)}
+              className="w-full bg-gray-50 border-2 border-black rounded-xl px-2 py-1.5 focus:outline-none cursor-pointer text-[11px]"
             >
-              {regions.map(r => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
+              <option value="all">All Statuses</option>
+              <option value="pending">Submitted / New</option>
+              <option value="assigned">Assigned</option>
+              <option value="in_progress">In Progress</option>
+              <option value="resolved">Resolved</option>
+            </select>
+          </div>
+
+          {/* 6. Date */}
+          <div>
+            <label className="block text-[10px] uppercase text-black/60 mb-1 truncate">Date</label>
+            <select
+              value={dateFilter}
+              onChange={e => setDateFilter(e.target.value)}
+              className="w-full bg-gray-50 border-2 border-black rounded-xl px-2 py-1.5 focus:outline-none cursor-pointer text-[11px]"
+            >
+              <option value="All">All Dates</option>
+              <option value="Today">Today</option>
+              <option value="This Week">This Week</option>
+              <option value="This Month">This Month</option>
+            </select>
+          </div>
+
+          {/* 7. SLA */}
+          <div>
+            <label className="block text-[10px] uppercase text-black/60 mb-1 truncate">SLA Status</label>
+            <select
+              value={slaFilter}
+              onChange={e => setSlaFilter(e.target.value)}
+              className="w-full bg-gray-50 border-2 border-black rounded-xl px-2 py-1.5 focus:outline-none cursor-pointer text-[11px]"
+            >
+              <option value="All">All SLA</option>
+              <option value="Within SLA">Within SLA</option>
+              <option value="Breached">SLA Breached / At Risk</option>
             </select>
           </div>
         </div>
@@ -276,11 +364,11 @@ export default function GovRequests() {
               <tr className="bg-brand-yellow/40 border-b-2 border-black text-black">
                 <th className="py-3 px-4">Request ID</th>
                 <th className="py-3 px-4">Category</th>
+                <th className="py-3 px-4">Department</th>
                 <th className="py-3 px-4">Region / Location</th>
                 <th className="py-3 px-4">Date</th>
-                <th className="py-3 px-4">Priority</th>
+                <th className="py-3 px-4">Severity</th>
                 <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4 text-right">Citizens Affected</th>
                 <th className="py-3 px-4 text-center">Action</th>
               </tr>
             </thead>
@@ -298,6 +386,9 @@ export default function GovRequests() {
                     <td className="py-3.5 px-4">
                       <CategoryBadge category={req.category} size="sm" />
                     </td>
+                    <td className="py-3.5 px-4 text-black font-semibold text-[11px] truncate max-w-44">
+                      {req.department || 'Public Works'}
+                    </td>
                     <td className="py-3.5 px-4 text-black">
                       <span className="truncate block max-w-44">{req.location}</span>
                     </td>
@@ -310,16 +401,13 @@ export default function GovRequests() {
                     <td className="py-3.5 px-4">
                       <StatusBadge status={req.status} size="sm" />
                     </td>
-                    <td className="py-3.5 px-4 text-right font-mono font-extrabold text-black">
-                      {(req.affectedCount || 8500).toLocaleString()}
-                    </td>
                     <td className="py-3.5 px-4 text-center">
                       <button
                         onClick={() => handleOpenModal(req)}
-                        className="btn-brutal-primary px-3 py-1.5 rounded-lg text-[10px] font-extrabold inline-flex items-center gap-1"
+                        className="btn-brutal-primary px-3 py-1.5 rounded-lg text-[10px] font-extrabold inline-flex items-center gap-1 cursor-pointer"
                       >
                         <Eye size={12} />
-                        <span>Manage &rarr;</span>
+                        <span>Inspect &rarr;</span>
                       </button>
                     </td>
                   </tr>
@@ -330,14 +418,14 @@ export default function GovRequests() {
         </div>
       </div>
 
-      {/* Official Management & Status Update Modal */}
+      {/* Official Complete Information & Status Update Modal */}
       {selectedReq && (
         <div
           className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4"
           onClick={() => setSelectedReq(null)}
         >
           <div
-            className="bg-white card-brutal-xl rounded-3xl max-w-2xl w-full max-h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150"
+            className="bg-white card-brutal-xl rounded-3xl max-w-2xl w-full max-h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150 border-2 border-black"
             onClick={e => e.stopPropagation()}
           >
             {/* Modal Header */}
@@ -348,14 +436,15 @@ export default function GovRequests() {
                     {selectedReq.id}
                   </span>
                   <CategoryBadge category={selectedReq.category} size="md" />
+                  <PriorityBadge priority={selectedReq.priority || 'medium'} size="sm" />
                 </div>
                 <h3 className="font-heading font-extrabold text-xl text-black mt-1">
-                  OFFICIAL ACTION & DISPATCH
+                  OFFICIAL GRIEVANCE FILE & ACTION DOSSIER
                 </h3>
               </div>
               <button
                 onClick={() => setSelectedReq(null)}
-                className="w-8 h-8 bg-white border-2 border-black rounded-lg flex items-center justify-center font-extrabold hover:bg-black hover:text-white transition-colors"
+                className="w-8 h-8 bg-white border-2 border-black rounded-lg flex items-center justify-center font-extrabold hover:bg-black hover:text-white transition-colors cursor-pointer"
               >
                 <X size={16} />
               </button>
@@ -364,20 +453,29 @@ export default function GovRequests() {
             {/* Modal Scrollable Body */}
             <div className="p-6 overflow-y-auto space-y-5 flex-1 text-xs">
               {/* Grievance Statement */}
-              <div className="p-4 bg-gray-50 border-2 border-black rounded-2xl space-y-1">
-                <span className="font-extrabold uppercase text-black/60 text-[10px]">Citizen Statement</span>
+              <div className="p-4 bg-gray-50 border-2 border-black rounded-2xl space-y-2">
+                <span className="font-extrabold uppercase text-black/60 text-[10px]">Citizen Grievance Statement</span>
                 <p className="font-medium text-sm text-black leading-relaxed">{selectedReq.description}</p>
-                <div className="flex items-center gap-3 pt-2 text-black/60 font-bold text-[11px]">
-                  <span>📍 {selectedReq.location}</span>
-                  <span>🗓 {new Date(selectedReq.createdAt).toLocaleDateString('en-IN')}</span>
-                  <span>👥 ~{(selectedReq.affectedCount || 8500).toLocaleString()} citizens affected</span>
+                {selectedReq.voiceTranscription && (
+                  <div className="p-2.5 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-900 flex items-start gap-2">
+                    <Mic size={14} className="text-amber-700 shrink-0 mt-0.5" />
+                    <span><strong>Audio Transcription:</strong> "{selectedReq.voiceTranscription}"</span>
+                  </div>
+                )}
+                <div className="flex flex-wrap items-center gap-3 pt-2 text-black/70 font-bold text-[11px] border-t border-black/10">
+                  <span className="flex items-center gap-1"><MapPin size={12} /> {selectedReq.location}</span>
+                  <span className="flex items-center gap-1"><Building size={12} /> {selectedReq.department || 'Public Works'}</span>
+                  <span className="flex items-center gap-1"><Calendar size={12} /> {new Date(selectedReq.createdAt).toLocaleDateString('en-IN')}</span>
                 </div>
               </div>
 
-              {/* Photo if any */}
+              {/* Photo Evidence if any */}
               {selectedReq.imageUrl && (
-                <div className="border-2 border-black rounded-xl overflow-hidden max-h-48">
-                  <img src={selectedReq.imageUrl} alt="Defect" className="w-full object-cover" />
+                <div className="space-y-1">
+                  <span className="font-extrabold uppercase text-[10px] text-black/60">Photo Evidence</span>
+                  <div className="border-2 border-black rounded-xl overflow-hidden max-h-48 bg-black">
+                    <img src={selectedReq.imageUrl} alt="Complaint Evidence" className="w-full h-44 object-cover" />
+                  </div>
                 </div>
               )}
 
@@ -385,29 +483,29 @@ export default function GovRequests() {
               <div className="p-3.5 bg-brand-yellow/30 border-2 border-black rounded-2xl space-y-1.5">
                 <div className="flex items-center gap-1.5 font-extrabold uppercase text-[10px] text-black">
                   <Sparkles size={13} />
-                  <span>Explainable AI Synthesis</span>
+                  <span>AI Technical Analysis & Severity Diagnostic</span>
                 </div>
-                <p className="font-medium text-black/90">{selectedReq.aiAnalysis.summary}</p>
+                <p className="font-medium text-black/90">{selectedReq.aiAnalysis?.summary || 'AI has analyzed severity and auto-routed to respective department.'}</p>
               </div>
 
               {/* Status Update Form (Live Updater) */}
               <div className="p-5 bg-brand-charcoal text-white border-2 border-black rounded-2xl space-y-4">
                 <h4 className="font-heading font-extrabold text-base text-brand-yellow uppercase">
-                  Update Grievance Status
+                  Update Official Status & Dispatch Response
                 </h4>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[10px] font-extrabold uppercase text-brand-sage mb-1">
-                      New Status State *
+                      Status State *
                     </label>
                     <select
                       value={newStatus}
                       onChange={e => setNewStatus(e.target.value as RequestStatus)}
-                      className="w-full bg-white text-black font-extrabold border-2 border-brand-yellow rounded-xl px-3 py-2 text-xs focus:outline-none"
+                      className="w-full bg-white text-black font-extrabold border-2 border-brand-yellow rounded-xl px-3 py-2 text-xs focus:outline-none cursor-pointer"
                     >
                       <option value="pending">SUBMITTED (Pending Assessment)</option>
-                      <option value="under_review">UNDER REVIEW (Inspection Assigned)</option>
+                      <option value="assigned">ASSIGNED (Officer Designated)</option>
                       <option value="in_progress">IN PROGRESS (Work Order Sanctioned)</option>
                       <option value="resolved">RESOLVED (Rectified & Completed)</option>
                     </select>
@@ -428,7 +526,7 @@ export default function GovRequests() {
 
                 <div>
                   <label className="block text-[10px] font-extrabold uppercase text-brand-sage mb-1">
-                    Official Response / Engineering Note (Visible to Citizen) *
+                    Official Engineering Note (Visible to Citizen in Real Time) *
                   </label>
                   <textarea
                     value={officialNote}
@@ -442,7 +540,7 @@ export default function GovRequests() {
                 {updateSuccess && (
                   <div className="p-2.5 bg-emerald-900/80 border border-emerald-400 rounded-xl text-emerald-300 font-extrabold text-xs flex items-center gap-2">
                     <CheckCircle size={15} />
-                    <span>Status updated successfully & synced with citizen portal!</span>
+                    <span>Status updated successfully & synced across all portals!</span>
                   </div>
                 )}
               </div>
@@ -452,14 +550,14 @@ export default function GovRequests() {
             <div className="p-4 bg-gray-50 border-t-2 border-black flex items-center justify-between">
               <button
                 onClick={() => setSelectedReq(null)}
-                className="btn-brutal-secondary px-5 py-2.5 rounded-xl text-xs font-bold"
+                className="btn-brutal-secondary px-5 py-2.5 rounded-xl text-xs font-bold cursor-pointer"
               >
                 Close
               </button>
               <button
                 onClick={handleUpdateStatus}
                 disabled={updating}
-                className="btn-brutal-primary px-6 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-2 disabled:opacity-50"
+                className="btn-brutal-primary px-6 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-2 disabled:opacity-50 cursor-pointer"
               >
                 <Send size={13} />
                 <span>{updating ? 'Updating...' : 'Publish Official Update →'}</span>

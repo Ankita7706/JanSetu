@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Search,
   Eye,
@@ -13,28 +13,66 @@ import {
   Briefcase,
   AlertCircle,
   CheckCircle2,
+  Mic,
+  Image as ImageIcon,
+  Calendar,
 } from 'lucide-react';
 import { authService } from '../../services/authService';
 import { requestService, useCitizenRequests } from '../../services/requestService';
 import StatusBadge from '../../components/common/StatusBadge';
 import PriorityBadge from '../../components/common/PriorityBadge';
 import CategoryBadge from '../../components/common/CategoryBadge';
-import type { CitizenRequest, RequestStatus } from '../../types';
+import type { CitizenRequest, RequestStatus, User } from '../../types';
 
 export default function MyRequestsGov() {
-  const rawUser = authService.getCurrentUser();
-  const currentUser = {
-    id: rawUser?.id || 'gov-user',
-    name: rawUser?.name || 'Government Official',
-    email: rawUser?.email || '',
-    role: rawUser?.role || 'official',
-    employeeId: rawUser?.employeeId || 'GOV-OFFICER',
-    department: rawUser?.department || 'Public Works Department (PWD)',
-    designation: rawUser?.designation || 'Government Officer',
-    location: rawUser?.location || rawUser?.district || 'Odisha State',
-    district: rawUser?.district || 'State Jurisdiction',
-    language: rawUser?.language || 'English',
-  };
+  const [currentUser, setCurrentUser] = useState<User>(() => {
+    const raw = authService.getCurrentUser();
+    return {
+      id: raw?.id || 'u2',
+      name: raw?.name || 'Rashmita Panigrahy',
+      email: raw?.email || 'official@demo.com',
+      role: raw?.role || 'official',
+      employeeId: raw?.employeeId || 'GOV-00-1234',
+      department: raw?.department || 'Water Resources & Public Health',
+      designation: raw?.designation || 'Assistant Executive Engineer (AEE)',
+      location: raw?.location || 'Kalahandi, Odisha',
+      district: raw?.district || 'Kalahandi',
+      language: raw?.language || 'English',
+      organization: raw?.organization || `${raw?.designation || 'Assistant Executive Engineer (AEE)'} • ${raw?.department || 'Water Resources & Public Health'}`,
+    };
+  });
+
+  useEffect(() => {
+    const unsubscribe = authService.subscribe(updated => {
+      if (updated) {
+        setCurrentUser({
+          id: updated.id || 'u2',
+          name: updated.name || 'Rashmita Panigrahy',
+          email: updated.email || 'official@demo.com',
+          role: updated.role || 'official',
+          employeeId: updated.employeeId || 'GOV-00-1234',
+          department: updated.department || 'Water Resources & Public Health',
+          designation: updated.designation || 'Assistant Executive Engineer (AEE)',
+          location: updated.location || 'Kalahandi, Odisha',
+          district: updated.district || 'Kalahandi',
+          language: updated.language || 'English',
+          organization: updated.organization || `${updated.designation || 'Assistant Executive Engineer (AEE)'} • ${updated.department || 'Water Resources & Public Health'}`,
+        });
+      }
+    });
+
+    const handleProfileCustomEvent = (e: any) => {
+      if (e.detail) {
+        setCurrentUser(e.detail);
+      }
+    };
+    window.addEventListener('jansetu_user_profile_updated', handleProfileCustomEvent);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener('jansetu_user_profile_updated', handleProfileCustomEvent);
+    };
+  }, []);
 
   const { loading } = useCitizenRequests();
   const [search, setSearch] = useState('');
@@ -129,17 +167,17 @@ export default function MyRequestsGov() {
             MY ASSIGNED GRIEVANCES
           </h1>
           <div className="flex flex-wrap items-center gap-3 mt-2 text-xs font-bold text-black/80">
-            <span className="flex items-center gap-1 bg-white/80 px-2.5 py-1 rounded-lg border border-black/20">
+            <span className="flex items-center gap-1 bg-white/80 px-2.5 py-1 rounded-lg border border-black/20 shadow-brutal-xs">
               <Briefcase size={12} />
-              {currentUser.designation || 'Field Engineer'}
+              {currentUser.designation || 'Assistant Executive Engineer (AEE)'}
             </span>
-            <span className="flex items-center gap-1 bg-white/80 px-2.5 py-1 rounded-lg border border-black/20">
+            <span className="flex items-center gap-1 bg-white/80 px-2.5 py-1 rounded-lg border border-black/20 shadow-brutal-xs">
               <Building size={12} />
-              {currentUser.department || 'Public Works'}
+              {currentUser.department || 'Water Resources & Public Health'}
             </span>
-            <span className="flex items-center gap-1 bg-white/80 px-2.5 py-1 rounded-lg border border-black/20">
-              <MapPin size={12} />
-              {currentUser.district || currentUser.location || 'Odisha'}
+            <span className="flex items-center gap-1 bg-white/80 px-2.5 py-1 rounded-lg border border-black/20 shadow-brutal-xs">
+              <MapPin size={12} className="text-red-600" />
+              {currentUser.district || 'Kalahandi'}
             </span>
           </div>
         </div>
@@ -190,7 +228,7 @@ export default function MyRequestsGov() {
       </div>
 
       {/* Filter Toolbar */}
-      <div className="bg-white card-brutal rounded-2xl p-5 space-y-3">
+      <div className="bg-white card-brutal rounded-2xl p-5 space-y-3 border-2 border-black">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           {/* Search */}
           <div className="sm:col-span-2 lg:col-span-2 relative">
@@ -250,7 +288,7 @@ export default function MyRequestsGov() {
       </div>
 
       {/* Table of Requests */}
-      <div className="bg-white card-brutal-lg rounded-3xl p-6 space-y-4">
+      <div className="bg-white card-brutal-lg rounded-3xl p-6 space-y-4 border-2 border-black">
         <div className="flex items-center justify-between">
           <h3 className="font-heading font-extrabold text-xl">TASK EXECUTION QUEUE</h3>
           <span className="text-xs font-bold text-black/60">Showing {filtered.length} requests</span>
@@ -269,37 +307,70 @@ export default function MyRequestsGov() {
                 <tr className="border-b-2 border-black bg-brand-yellow/30 text-black">
                   <th className="py-3 px-3">Tracking ID</th>
                   <th className="py-3 px-3">Category</th>
-                  <th className="py-3 px-3">Location / Ward</th>
-                  <th className="py-3 px-3">Priority</th>
+                  <th className="py-3 px-3">Citizen Problem</th>
+                  <th className="py-3 px-3">Location</th>
+                  <th className="py-3 px-3">Severity</th>
+                  <th className="py-3 px-3">SLA Target</th>
+                  <th className="py-3 px-3">Media</th>
                   <th className="py-3 px-3">Status</th>
                   <th className="py-3 px-3 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-black/10">
-                {filtered.map(req => (
-                  <tr key={req.id} className="hover:bg-brand-yellow/10 transition-colors">
-                    <td className="py-3 px-3 font-mono text-black font-extrabold">{req.id}</td>
-                    <td className="py-3 px-3">
-                      <CategoryBadge category={req.category} size="sm" />
-                    </td>
-                    <td className="py-3 px-3 text-black/80">{req.location}</td>
-                    <td className="py-3 px-3">
-                      <PriorityBadge priority={req.priority || 'medium'} size="sm" />
-                    </td>
-                    <td className="py-3 px-3">
-                      <StatusBadge status={req.status} size="sm" />
-                    </td>
-                    <td className="py-3 px-3 text-right">
-                      <button
-                        onClick={() => handleOpenModal(req)}
-                        className="btn-brutal-primary px-3 py-1.5 rounded-lg text-xs font-extrabold inline-flex items-center gap-1"
-                      >
-                        <Eye size={12} />
-                        <span>Update</span>
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {filtered.map(req => {
+                  const hasVoice = req.isVoice || req.voiceTranscription;
+                  const hasImage = !!req.imageUrl;
+                  return (
+                    <tr key={req.id} className="hover:bg-brand-yellow/10 transition-colors">
+                      <td className="py-3 px-3 font-mono text-black font-extrabold">{req.id}</td>
+                      <td className="py-3 px-3">
+                        <CategoryBadge category={req.category} size="sm" />
+                      </td>
+                      <td className="py-3 px-3 text-black max-w-[220px]">
+                        <p className="truncate font-medium">{req.description}</p>
+                        {req.aiAnalysis?.summary && (
+                          <p className="text-[10px] text-black/60 truncate italic mt-0.5">
+                            AI: {req.aiAnalysis.summary}
+                          </p>
+                        )}
+                      </td>
+                      <td className="py-3 px-3 text-black/80">{req.location}</td>
+                      <td className="py-3 px-3">
+                        <PriorityBadge priority={req.priority || 'medium'} size="sm" />
+                      </td>
+                      <td className="py-3 px-3 font-mono text-[11px] text-black/70">
+                        {req.officialResponse?.estimatedResolution || '48h SLA'}
+                      </td>
+                      <td className="py-3 px-3">
+                        <div className="flex items-center gap-1.5">
+                          {hasVoice && (
+                            <span className="p-1 bg-amber-100 text-amber-800 rounded border border-amber-400" title="Voice submission">
+                              <Mic size={12} />
+                            </span>
+                          )}
+                          {hasImage && (
+                            <span className="p-1 bg-blue-100 text-blue-800 rounded border border-blue-400" title="Photo attached">
+                              <ImageIcon size={12} />
+                            </span>
+                          )}
+                          {!hasVoice && !hasImage && <span className="text-black/30 text-[10px]">Text</span>}
+                        </div>
+                      </td>
+                      <td className="py-3 px-3">
+                        <StatusBadge status={req.status} size="sm" />
+                      </td>
+                      <td className="py-3 px-3 text-right">
+                        <button
+                          onClick={() => handleOpenModal(req)}
+                          className="btn-brutal-primary px-3 py-1.5 rounded-lg text-xs font-extrabold inline-flex items-center gap-1 cursor-pointer"
+                        >
+                          <Eye size={12} />
+                          <span>Process</span>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -309,27 +380,67 @@ export default function MyRequestsGov() {
       {/* Status Workflow Update Modal */}
       {selectedReq && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4" onClick={() => setSelectedReq(null)}>
-          <div className="bg-white card-brutal-xl rounded-2xl max-w-xl w-full p-6 md:p-8 space-y-5 animate-in zoom-in-95 duration-150" onClick={e => e.stopPropagation()}>
+          <div className="bg-white card-brutal-xl rounded-2xl max-w-xl w-full p-6 md:p-8 space-y-5 animate-in zoom-in-95 duration-150 border-2 border-black" onClick={e => e.stopPropagation()}>
             <div className="flex items-start justify-between gap-2 pb-3 border-b-2 border-black">
               <div>
-                <span className="font-mono text-xs font-extrabold text-black/60">{selectedReq.id}</span>
-                <h3 className="font-heading font-extrabold text-2xl mt-0.5">{selectedReq.category}</h3>
-                <p className="text-xs font-bold text-black/60 mt-0.5">{selectedReq.location}</p>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs font-extrabold bg-black text-brand-yellow px-2 py-0.5 rounded">
+                    {selectedReq.id}
+                  </span>
+                  <CategoryBadge category={selectedReq.category} size="sm" />
+                  <PriorityBadge priority={selectedReq.priority || 'medium'} size="sm" />
+                </div>
+                <h3 className="font-heading font-extrabold text-2xl mt-1.5">CITIZEN GRIEVANCE DOSSIER</h3>
+                <p className="text-xs font-bold text-black/60 mt-0.5">
+                  Assigned Department: {selectedReq.department || currentUser.department} • 📍 {selectedReq.location}
+                </p>
               </div>
-              <button onClick={() => setSelectedReq(null)} className="w-8 h-8 rounded-lg border-2 border-black flex items-center justify-center hover:bg-black hover:text-white">
+              <button onClick={() => setSelectedReq(null)} className="w-8 h-8 rounded-lg border-2 border-black flex items-center justify-center hover:bg-black hover:text-white cursor-pointer">
                 <X size={16} />
               </button>
             </div>
 
-            {/* Description */}
-            <div className="p-3.5 bg-gray-50 border-2 border-black/20 rounded-xl space-y-1">
-              <p className="text-[10px] font-extrabold uppercase text-black/60">Citizen Grievance Description</p>
+            {/* Citizen Statement */}
+            <div className="p-3.5 bg-gray-50 border-2 border-black rounded-xl space-y-1">
+              <p className="text-[10px] font-extrabold uppercase text-black/60">Citizen Problem Statement</p>
               <p className="text-xs font-medium text-black leading-relaxed">{selectedReq.description}</p>
+              {selectedReq.voiceTranscription && (
+                <div className="mt-2 p-2 bg-amber-50 border border-amber-300 rounded-lg text-[11px] text-amber-900 flex items-start gap-1.5">
+                  <Mic size={13} className="shrink-0 mt-0.5 text-amber-700" />
+                  <span><strong>Voice Audio Transcription:</strong> "{selectedReq.voiceTranscription}"</span>
+                </div>
+              )}
             </div>
+
+            {/* Photos if any */}
+            {selectedReq.imageUrl && (
+              <div className="space-y-1">
+                <span className="text-[10px] font-extrabold uppercase text-black/60">Citizen Photo Evidence</span>
+                <div className="border-2 border-black rounded-xl overflow-hidden max-h-48 bg-black">
+                  <img src={selectedReq.imageUrl} alt="Complaint attachment" className="w-full h-44 object-cover" />
+                </div>
+              </div>
+            )}
+
+            {/* AI Technical Analysis Summary */}
+            {selectedReq.aiAnalysis && (
+              <div className="p-3.5 bg-brand-yellow/30 border-2 border-black rounded-xl space-y-1">
+                <div className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase text-black">
+                  <Sparkles size={13} />
+                  <span>AI Summary & Automated Triage</span>
+                </div>
+                <p className="text-xs font-medium text-black/90">{selectedReq.aiAnalysis.summary}</p>
+                <div className="flex flex-wrap gap-2 pt-1 text-[10px] font-bold text-black/70">
+                  <span>Severity: <strong className="uppercase">{selectedReq.aiAnalysis.severity}</strong></span>
+                  <span>•</span>
+                  <span>Confidence: <strong>{Math.round((selectedReq.aiAnalysis.confidence || 0.95) * 100)}%</strong></span>
+                </div>
+              </div>
+            )}
 
             {/* Workflow Transition Stepper: New -> Assigned -> In Progress -> Resolved */}
             <div className="space-y-2">
-              <label className="font-bold text-xs uppercase tracking-wider block">Workflow Status</label>
+              <label className="font-bold text-xs uppercase tracking-wider block">Update Grievance Status</label>
               <div className="grid grid-cols-4 gap-2">
                 {[
                   { key: 'pending', label: '1. New' },
@@ -341,7 +452,7 @@ export default function MyRequestsGov() {
                     key={s.key}
                     type="button"
                     onClick={() => setNewStatus(s.key as RequestStatus)}
-                    className={`py-2 px-2 rounded-xl border-2 font-bold text-xs transition-all text-center ${
+                    className={`py-2 px-2 rounded-xl border-2 font-bold text-xs transition-all text-center cursor-pointer ${
                       newStatus === s.key
                         ? 'bg-brand-yellow border-black shadow-brutal-sm text-black font-extrabold'
                         : 'bg-gray-50 border-black/30 hover:border-black'
@@ -362,15 +473,16 @@ export default function MyRequestsGov() {
                 rows={3}
                 value={officialNote}
                 onChange={e => setOfficialNote(e.target.value)}
-                placeholder="e.g. Work order issued to junior engineer team for asphalt patching."
+                placeholder="e.g. Field inspection completed. Work order #892 issued to contractor for emergency pipeline replacement."
                 className="w-full border-2 border-black rounded-xl p-3 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-black"
               />
             </div>
 
             {/* Estimated Resolution Date */}
             <div>
-              <label className="font-bold text-xs uppercase tracking-wider block mb-1">
-                Target Resolution Date
+              <label className="font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 mb-1">
+                <Calendar size={13} />
+                <span>SLA Target / Estimated Resolution Date</span>
               </label>
               <input
                 type="date"
@@ -390,14 +502,14 @@ export default function MyRequestsGov() {
             <div className="flex gap-3 pt-2">
               <button
                 onClick={() => setSelectedReq(null)}
-                className="btn-brutal-secondary flex-1 py-3 rounded-xl text-xs font-bold"
+                className="btn-brutal-secondary flex-1 py-3 rounded-xl text-xs font-bold cursor-pointer"
               >
                 Close
               </button>
               <button
                 onClick={handleUpdateStatus}
                 disabled={updating}
-                className="btn-brutal-primary flex-1 py-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5"
+                className="btn-brutal-primary flex-1 py-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Send size={13} />
                 <span>{updating ? 'Updating...' : 'Publish Official Update'}</span>

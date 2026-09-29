@@ -52,7 +52,7 @@ export default function DemandHotspots() {
     setProjectCreated(true);
     setTimeout(() => {
       setProjectModalOpen(false);
-      navigate('/government/projects');
+      navigate('/government/recommendations');
     }, 1200);
   };
 

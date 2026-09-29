@@ -138,35 +138,54 @@ export const analyticsService = {
     const reqs = customRequests || requestService.getAll();
     if (reqs.length === 0) return MOCK_HOTSPOTS;
 
-    // Group real requests by location
-    const locationGroups: Record<string, CitizenRequest[]> = {};
+    const DISTRICT_COORDS: Record<string, { lat: number; lng: number }> = {
+      'Kalahandi': { lat: 19.904, lng: 82.802 },
+      'Bhubaneswar': { lat: 20.296, lng: 85.824 },
+      'Cuttack': { lat: 20.462, lng: 85.882 },
+      'Koraput': { lat: 18.813, lng: 82.711 },
+      'Malkangiri': { lat: 18.351, lng: 81.897 },
+      'Rayagada': { lat: 19.167, lng: 83.417 },
+      'Nuapada': { lat: 20.833, lng: 82.533 },
+      'Sambalpur': { lat: 21.467, lng: 83.983 },
+      'Puri': { lat: 19.813, lng: 85.831 },
+      'Balasore': { lat: 21.493, lng: 86.933 },
+      'Ganjam': { lat: 19.380, lng: 85.050 },
+      'Mayurbhanj': { lat: 21.930, lng: 86.720 },
+    };
+
+    // Group real requests by region + category
+    const clusterGroups: Record<string, CitizenRequest[]> = {};
     reqs.forEach(r => {
-      const locKey = r.location.split(',')[0].trim() || 'Odisha Central';
-      if (!locationGroups[locKey]) locationGroups[locKey] = [];
-      locationGroups[locKey].push(r);
+      const reg = r.region || r.location.split(',')[0].trim() || 'Kalahandi';
+      const cat = r.category || 'Roads';
+      const key = `${reg}:::${cat}`;
+      if (!clusterGroups[key]) clusterGroups[key] = [];
+      clusterGroups[key].push(r);
     });
 
-    const computedHotspots: Hotspot[] = Object.entries(locationGroups).map(([region, items], index) => {
-      const topCat = items[0]?.category || 'Roads';
-      const affected = items.reduce((sum, i) => sum + (i.affectedCount || 1000), 0);
-      const isCritical = items.some(i => i.aiAnalysis?.severity === 'critical' || i.priority === 'high');
-      const lat = items[0]?.coordinates?.lat || 19.9 + (index * 0.1);
-      const lng = items[0]?.coordinates?.lng || 82.8 + (index * 0.1);
+    const computedHotspots: Hotspot[] = Object.entries(clusterGroups).map(([key, items], index) => {
+      const [region, category] = key.split(':::') as [string, Category];
+      const count = items.length;
+      const affected = items.reduce((sum, i) => sum + (i.affectedCount || 3500), 0);
+      const isCritical = items.some(i => i.aiAnalysis?.severity === 'critical' || i.aiAnalysis?.severity === 'high' || i.priority === 'high');
+      
+      const coords = DISTRICT_COORDS[region] || { lat: 19.9 + (index * 0.15), lng: 82.8 + (index * 0.2) };
+      const aiSummary = items[0]?.aiAnalysis?.summary || `AI detected ${count} correlated ${category.toLowerCase()} grievances within ${region} jurisdiction.`;
 
       return {
         id: `HOTSPOT-${index + 1}`,
-        name: `${region} Cluster`,
+        name: `${region} ${category} Hotspot`,
         region,
-        category: topCat,
-        requestCount: items.length,
-        affectedPopulation: affected,
-        priority: isCritical ? 'high' : 'medium',
-        lat,
-        lng,
-        radius: Math.min(5000, 1000 + items.length * 500),
-        severityScore: isCritical ? 92 : 75,
-        trend: '+15% this week',
-        summary: items[0]?.description || `Clustered demand in ${region}`,
+        category,
+        requestCount: count,
+        affectedPopulation: affected > 0 ? affected : count * 2800,
+        priority: isCritical || count >= 2 ? 'high' : 'medium',
+        lat: items[0]?.coordinates?.lat || coords.lat,
+        lng: items[0]?.coordinates?.lng || coords.lng,
+        radius: Math.min(5000, 1500 + count * 600),
+        severityScore: isCritical ? 92 : Math.min(88, 65 + count * 5),
+        trend: '+24% concentration this month',
+        summary: `${aiSummary} Direct feedback from ${count} citizens indicates infrastructure deficit affecting estimated ${affected.toLocaleString()} residents.`,
       };
     });
 

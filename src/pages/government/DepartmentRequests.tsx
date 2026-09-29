@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Search,
   CheckCircle,
@@ -6,29 +6,68 @@ import {
   UserPlus,
   AlertCircle,
   Building,
+  Sparkles,
+  CheckCircle2,
+  AlertTriangle,
+  ArrowRight,
 } from 'lucide-react';
 import { authService } from '../../services/authService';
 import { requestService, useCitizenRequests } from '../../services/requestService';
 import StatusBadge from '../../components/common/StatusBadge';
 import PriorityBadge from '../../components/common/PriorityBadge';
 import CategoryBadge from '../../components/common/CategoryBadge';
-import type { CitizenRequest, RequestStatus } from '../../types';
+import type { CitizenRequest, RequestStatus, User } from '../../types';
 import { DISTRICTS, DESIGNATIONS } from '../../types';
 
 export default function DepartmentRequests() {
-  const rawUser = authService.getCurrentUser();
-  const currentUser = {
-    id: rawUser?.id || 'gov-user',
-    name: rawUser?.name || 'Government Official',
-    email: rawUser?.email || '',
-    role: rawUser?.role || 'official',
-    employeeId: rawUser?.employeeId || 'GOV-OFFICER',
-    department: rawUser?.department || 'Public Works Department (PWD)',
-    designation: rawUser?.designation || 'Government Officer',
-    location: rawUser?.location || rawUser?.district || 'Odisha State',
-    district: rawUser?.district || 'State Jurisdiction',
-    language: rawUser?.language || 'English',
-  };
+  const [currentUser, setCurrentUser] = useState<User>(() => {
+    const raw = authService.getCurrentUser();
+    return {
+      id: raw?.id || 'u2',
+      name: raw?.name || 'Rashmita Panigrahy',
+      email: raw?.email || 'official@demo.com',
+      role: raw?.role || 'official',
+      employeeId: raw?.employeeId || 'GOV-00-1234',
+      department: raw?.department || 'Water Resources & Public Health',
+      designation: raw?.designation || 'Assistant Executive Engineer (AEE)',
+      location: raw?.location || 'Kalahandi, Odisha',
+      district: raw?.district || 'Kalahandi',
+      language: raw?.language || 'English',
+      organization: raw?.organization || `${raw?.designation || 'Assistant Executive Engineer (AEE)'} • ${raw?.department || 'Water Resources & Public Health'}`,
+    };
+  });
+
+  useEffect(() => {
+    const unsubscribe = authService.subscribe(updated => {
+      if (updated) {
+        setCurrentUser({
+          id: updated.id || 'u2',
+          name: updated.name || 'Rashmita Panigrahy',
+          email: updated.email || 'official@demo.com',
+          role: updated.role || 'official',
+          employeeId: updated.employeeId || 'GOV-00-1234',
+          department: updated.department || 'Water Resources & Public Health',
+          designation: updated.designation || 'Assistant Executive Engineer (AEE)',
+          location: updated.location || 'Kalahandi, Odisha',
+          district: updated.district || 'Kalahandi',
+          language: updated.language || 'English',
+          organization: updated.organization || `${updated.designation || 'Assistant Executive Engineer (AEE)'} • ${updated.department || 'Water Resources & Public Health'}`,
+        });
+      }
+    });
+
+    const handleProfileCustomEvent = (e: any) => {
+      if (e.detail) {
+        setCurrentUser(e.detail);
+      }
+    };
+    window.addEventListener('jansetu_user_profile_updated', handleProfileCustomEvent);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener('jansetu_user_profile_updated', handleProfileCustomEvent);
+    };
+  }, []);
 
   const { loading } = useCitizenRequests();
   const [search, setSearch] = useState('');
@@ -44,6 +83,15 @@ export default function DepartmentRequests() {
   const [assignSuccess, setAssignSuccess] = useState(false);
 
   const deptRequests = requestService.getByDepartment(currentUser.department, districtFilter !== 'All' ? districtFilter : undefined);
+
+  // Metrics required by Photo 3 & 4:
+  // - Total department requests, Pending, In progress, Resolved, High priority, SLA breached
+  const totalDeptRequests = deptRequests.length;
+  const pendingCount = deptRequests.filter(r => r.status === 'pending' || r.status === 'new').length;
+  const inProgressCount = deptRequests.filter(r => r.status === 'in_progress' || r.status === 'assigned' || r.status === 'under_review').length;
+  const resolvedCount = deptRequests.filter(r => r.status === 'resolved').length;
+  const highPriorityCount = deptRequests.filter(r => r.priority === 'high' || r.aiAnalysis?.severity === 'critical' || r.aiAnalysis?.severity === 'high').length;
+  const slaBreachedCount = deptRequests.filter(r => (r.status === 'pending' || r.status === 'new') && r.priority === 'high').length;
 
   const filtered = deptRequests.filter(req => {
     if (statusFilter !== 'all') {
@@ -89,17 +137,17 @@ export default function DepartmentRequests() {
   return (
     <div className="space-y-6 font-body">
       {/* Header */}
-      <div className="bg-brand-yellow card-brutal rounded-2xl p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-brand-yellow card-brutal rounded-2xl p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-4 border-2 border-black">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 bg-white border-2 border-black rounded-full shadow-brutal-sm text-xs font-extrabold uppercase tracking-wider mb-2">
             <Building size={13} className="text-black" />
-            Department Triage Registry
+            Automated AI Department Routing Desk
           </div>
           <h1 className="font-heading font-extrabold text-3xl md:text-4xl text-black">
-            {currentUser.department || 'DEPARTMENT'} GRIEVANCES
+            {currentUser.department?.toUpperCase() || 'WATER RESOURCES'} REGISTRY
           </h1>
           <p className="font-medium text-sm text-black/75 mt-1">
-            Department-wide civic requests auto-routed from citizen categories and clustered by regional jurisdictions.
+            Grievances automatically routed from citizen category detection directly into {currentUser.department}.
           </p>
         </div>
 
@@ -110,13 +158,67 @@ export default function DepartmentRequests() {
             </span>
           )}
           <div className="bg-black text-white px-4 py-2.5 rounded-xl border-2 border-black shadow-brutal-sm font-mono text-xs font-extrabold">
-            <span>Total in Department: {deptRequests.length}</span>
+            <span>Total in Department: {totalDeptRequests}</span>
           </div>
         </div>
       </div>
 
+      {/* AI Routing Workflow Demonstration Card (From Photo 3) */}
+      <div className="bg-white card-brutal rounded-2xl p-5 border-2 border-black space-y-3">
+        <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-black">
+          <Sparkles size={16} className="text-amber-600" />
+          <span>Intelligent Auto-Routing Architecture</span>
+        </div>
+        <div className="bg-brand-charcoal text-white p-4 rounded-xl border-2 border-black font-mono text-xs space-y-2">
+          <div className="text-brand-sage">Citizen submits: <span className="text-white font-bold">"Water supply pipeline burst in Ward 4, Bhawanipatna"</span></div>
+          <div className="flex items-center gap-2 text-brand-yellow font-bold">
+            <ArrowRight size={14} /> AI Processing (NLP Classification & Entity Extraction)
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] bg-black/40 p-2.5 rounded-lg border border-white/20">
+            <div><span className="text-white/60 block">Category:</span> <span className="text-brand-yellow font-bold">Water</span></div>
+            <div><span className="text-white/60 block">Department:</span> <span className="text-brand-yellow font-bold">{currentUser.department || 'Water Resources'}</span></div>
+            <div><span className="text-white/60 block">Region:</span> <span className="text-brand-yellow font-bold">{currentUser.district || 'Kalahandi'}</span></div>
+            <div><span className="text-white/60 block">Priority:</span> <span className="text-red-400 font-bold">High / Critical</span></div>
+          </div>
+          <div className="text-emerald-400 font-bold text-[11px] flex items-center gap-1.5">
+            <CheckCircle size={13} />
+            <span>Successfully dispatched into {currentUser.department} Action Registry.</span>
+          </div>
+        </div>
+      </div>
+
+      {/* KPI Tiles as requested in Photo 3 & 4 */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="p-4 bg-white card-brutal rounded-2xl border-2 border-black text-center">
+          <p className="text-[10px] font-extrabold uppercase text-black/50">Total Dept Requests</p>
+          <p className="font-heading font-extrabold text-2xl text-black mt-1">{totalDeptRequests}</p>
+        </div>
+        <div className="p-4 bg-white card-brutal rounded-2xl border-2 border-black text-center">
+          <p className="text-[10px] font-extrabold uppercase text-blue-700">Pending / New</p>
+          <p className="font-heading font-extrabold text-2xl text-blue-800 mt-1">{pendingCount}</p>
+        </div>
+        <div className="p-4 bg-white card-brutal rounded-2xl border-2 border-black text-center">
+          <p className="text-[10px] font-extrabold uppercase text-amber-700">In Progress</p>
+          <p className="font-heading font-extrabold text-2xl text-amber-800 mt-1">{inProgressCount}</p>
+        </div>
+        <div className="p-4 bg-white card-brutal rounded-2xl border-2 border-black text-center">
+          <p className="text-[10px] font-extrabold uppercase text-emerald-700">Resolved</p>
+          <p className="font-heading font-extrabold text-2xl text-emerald-800 mt-1">{resolvedCount}</p>
+        </div>
+        <div className="p-4 bg-white card-brutal rounded-2xl border-2 border-black text-center">
+          <p className="text-[10px] font-extrabold uppercase text-red-700">High Priority</p>
+          <p className="font-heading font-extrabold text-2xl text-red-600 mt-1">{highPriorityCount}</p>
+        </div>
+        <div className="p-4 bg-white card-brutal rounded-2xl border-2 border-black text-center">
+          <p className="text-[10px] font-extrabold uppercase text-rose-700 flex items-center justify-center gap-1">
+            <AlertTriangle size={11} /> SLA Breached
+          </p>
+          <p className="font-heading font-extrabold text-2xl text-rose-700 mt-1">{slaBreachedCount}</p>
+        </div>
+      </div>
+
       {/* Filter Toolbar */}
-      <div className="bg-white card-brutal rounded-2xl p-5 space-y-3">
+      <div className="bg-white card-brutal rounded-2xl p-5 space-y-3 border-2 border-black">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           {/* Search */}
           <div className="sm:col-span-2 lg:col-span-1 relative">
@@ -190,7 +292,7 @@ export default function DepartmentRequests() {
       </div>
 
       {/* Main Table */}
-      <div className="bg-white card-brutal-lg rounded-3xl p-6 space-y-4">
+      <div className="bg-white card-brutal-lg rounded-3xl p-6 space-y-4 border-2 border-black">
         <div className="flex items-center justify-between">
           <h3 className="font-heading font-extrabold text-xl">DEPARTMENT REGISTRY QUEUE</h3>
           <span className="text-xs font-bold text-black/60">Showing {filtered.length} of {deptRequests.length}</span>
@@ -245,7 +347,7 @@ export default function DepartmentRequests() {
                           setAssignReq(req);
                           setOfficerName(req.assignedOfficerName || currentUser.name);
                         }}
-                        className="btn-brutal-secondary px-3 py-1.5 rounded-lg text-xs font-extrabold inline-flex items-center gap-1"
+                        className="btn-brutal-secondary px-3 py-1.5 rounded-lg text-xs font-extrabold inline-flex items-center gap-1 cursor-pointer"
                       >
                         <UserPlus size={12} />
                         <span>Assign / Route</span>
@@ -262,13 +364,13 @@ export default function DepartmentRequests() {
       {/* Assignment Modal */}
       {assignReq && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4" onClick={() => setAssignReq(null)}>
-          <div className="bg-white card-brutal-xl rounded-2xl max-w-md w-full p-6 space-y-4 animate-in zoom-in-95 duration-150" onClick={e => e.stopPropagation()}>
+          <div className="bg-white card-brutal-xl rounded-2xl max-w-md w-full p-6 space-y-4 animate-in zoom-in-95 duration-150 border-2 border-black" onClick={e => e.stopPropagation()}>
             <div className="flex items-start justify-between pb-2 border-b-2 border-black">
               <div>
                 <span className="font-mono text-xs font-extrabold text-black/60">{assignReq.id}</span>
                 <h3 className="font-heading font-extrabold text-xl mt-0.5">Assign Officer to Request</h3>
               </div>
-              <button onClick={() => setAssignReq(null)} className="w-8 h-8 rounded-lg border-2 border-black flex items-center justify-center hover:bg-black hover:text-white">
+              <button onClick={() => setAssignReq(null)} className="w-8 h-8 rounded-lg border-2 border-black flex items-center justify-center hover:bg-black hover:text-white cursor-pointer">
                 <X size={16} />
               </button>
             </div>
@@ -290,7 +392,7 @@ export default function DepartmentRequests() {
                 <select
                   value={officerDesignation}
                   onChange={e => setOfficerDesignation(e.target.value)}
-                  className="w-full border-2 border-black rounded-xl p-2.5 text-xs font-bold focus:outline-none"
+                  className="w-full border-2 border-black rounded-xl p-2.5 text-xs font-bold focus:outline-none cursor-pointer"
                 >
                   {DESIGNATIONS.map(d => (
                     <option key={d} value={d}>{d}</option>
@@ -301,16 +403,16 @@ export default function DepartmentRequests() {
 
             {assignSuccess && (
               <div className="p-2.5 bg-emerald-100 border-2 border-emerald-600 rounded-xl text-emerald-800 text-xs font-bold flex items-center gap-1.5">
-                <CheckCircle size={14} />
+                <CheckCircle2 size={14} />
                 <span>Assigned successfully! Status changed to 'Assigned'.</span>
               </div>
             )}
 
             <div className="flex gap-2 pt-2">
-              <button onClick={() => setAssignReq(null)} className="btn-brutal-secondary flex-1 py-2.5 rounded-xl text-xs font-bold">
+              <button onClick={() => setAssignReq(null)} className="btn-brutal-secondary flex-1 py-2.5 rounded-xl text-xs font-bold cursor-pointer">
                 Cancel
               </button>
-              <button onClick={handleAssign} className="btn-brutal-primary flex-1 py-2.5 rounded-xl text-xs font-extrabold">
+              <button onClick={handleAssign} className="btn-brutal-primary flex-1 py-2.5 rounded-xl text-xs font-extrabold cursor-pointer">
                 Confirm Assignment
               </button>
             </div>
