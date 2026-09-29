@@ -1,22 +1,23 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mic, Globe, ArrowRight, Volume2, CheckCircle, RotateCcw, Mail } from 'lucide-react';
+import { Mic, Globe, ArrowRight, Volume2, CheckCircle, RotateCcw, Mail, Edit3 } from 'lucide-react';
 import { authService } from '../../services/authService';
 import { requestService } from '../../services/requestService';
 import { aiService } from '../../services/aiService';
 import { sendRequestConfirmationEmail } from '../../services/emailService';
 import type { AIAnalysis } from '../../types';
-import AudioVisualizer from '../../components/common/AudioVisualizer';
+import AudioVisualizer, { type AudioRecordingData } from '../../components/common/AudioVisualizer';
 import PriorityBadge from '../../components/common/PriorityBadge';
 import CategoryBadge from '../../components/common/CategoryBadge';
 
 const LANGUAGES = [
-  { key: 'odia', label: 'ଓଡ଼ିଆ (Odia)', sample: 'ଆମ ଗାଁକୁ ଭଲ ରାସ୍ତା ନାହିଁ ଏବଂ ପିଇବା ପାଣି ପାଇପ୍ ଭାଙ୍ଗିଯାଇଛି।' },
-  { key: 'hindi', label: 'हिन्दी (Hindi)', sample: 'हमारे गांव में पीने का साफ पानी नहीं है और स्ट्रीटलाइट खराब हैं।' },
-  { key: 'bengali', label: 'বাংলা (Bengali)', sample: 'আমাদের গ্রামে ড্রেনেজ বন্ধ থাকায় রাস্তায় জল জমে যাচ্ছে।' },
-  { key: 'tamil', label: 'தமிழ் (Tamil)', sample: 'எங்கள் பகுதியில் சாலைகள் பழுதடைந்துள்ளன, குடிநீர் தட்டுப்பாடு உள்ளது.' },
-  { key: 'telugu', label: 'తెలుగు (Telugu)', sample: 'మా గ్రామంలో రోడ్డు సరిగా లేదు మరియు విద్యుత్ కోతలు ఎక్కువగా ఉన్నాయి.' },
-  { key: 'english', label: 'English', sample: 'The main connecting road has severe craters and ambulances cannot reach.' },
+  { key: 'odia', code: 'or-IN', label: 'ଓଡ଼ିଆ (Odia)', sample: 'ଆମ ଗାଁକୁ ଭଲ ରାସ୍ତା ନାହିଁ ଏବଂ ପିଇବା ପାଣି ପାଇପ୍ ଭାଙ୍ଗିଯାଇଛି।' },
+  { key: 'hindi', code: 'hi-IN', label: 'हिन्दी (Hindi)', sample: 'हमारे गांव में पीने का साफ पानी नहीं है और स्ट्रीटलाइट खराब हैं।' },
+  { key: 'bengali', code: 'bn-IN', label: 'বাংলা (Bengali)', sample: 'আমাদের গ্রামে ড্রেনেজ বন্ধ থাকায় রাস্তায় জল জমে যাচ্ছে।' },
+  { key: 'tamil', code: 'ta-IN', label: 'தமிழ் (Tamil)', sample: 'எங்கள் பகுதியில் சாலைகள் பழுதடைந்துள்ளன, குடிநீர் தட்டுப்பாடு உள்ளது.' },
+  { key: 'telugu', code: 'te-IN', label: 'తెలుగు (Telugu)', sample: 'మా గ్రామంలో రోడ్డు సరిగా లేదు మరియు విద్యుత్ కోతలు ఎక్కువగా ఉన్నాయి.' },
+  { key: 'marathi', code: 'mr-IN', label: 'मराठी (Marathi)', sample: 'आमच्या गावात पिण्याचे पाणी येत नाही आणि रस्ते खराब आहेत.' },
+  { key: 'english', code: 'en-IN', label: 'English', sample: 'The main connecting road has severe craters and ambulances cannot reach.' },
 ];
 
 export default function VoiceRequest() {
@@ -36,16 +37,18 @@ export default function VoiceRequest() {
   const [translation, setTranslation] = useState('');
   const [aiResult, setAiResult] = useState<AIAnalysis | null>(null);
   const [createdRequestId, setCreatedRequestId] = useState('');
+  const [isEditingOriginal, setIsEditingOriginal] = useState(false);
 
-  const handleRecordingFinished = async () => {
+  const handleRecordingFinished = async (audioData: AudioRecordingData) => {
     setStep('analyzing');
     try {
-      const res = await aiService.analyzeVoice(selectedLang.key);
+      const res = await aiService.analyzeVoice(selectedLang.key, audioData.transcript);
       setTranscription(res.transcription);
       setTranslation(res.translation);
       setAiResult(res.analysis);
       setStep('result');
-    } catch {
+    } catch (err) {
+      console.error('Voice analysis error:', err);
       setStep('record');
     }
   };
@@ -80,6 +83,15 @@ export default function VoiceRequest() {
     }).catch(err => {
       console.warn('Could not dispatch voice confirmation email:', err);
     });
+  };
+
+  const handleTranscriptionEdit = async (newText: string) => {
+    setTranscription(newText);
+    try {
+      const res = await aiService.analyzeVoice(selectedLang.key, newText);
+      setTranslation(res.translation);
+      setAiResult(res.analysis);
+    } catch {}
   };
 
   if (step === 'success') {
@@ -156,9 +168,9 @@ export default function VoiceRequest() {
         </div>
 
         <div>
-          <h2 className="font-heading font-extrabold text-2xl md:text-3xl">TRANSCRIBING NATIVE AUDIO</h2>
+          <h2 className="font-heading font-extrabold text-2xl md:text-3xl">TRANSCRIBING AUDIO</h2>
           <p className="text-xs font-bold text-black/60 mt-1">
-            Applying BRICS Multilingual Whisper Speech-to-Text in {selectedLang.label}...
+            Analyzing speech in {selectedLang.label} &amp; applying NLP auto-classification...
           </p>
         </div>
 
@@ -217,6 +229,7 @@ export default function VoiceRequest() {
           {/* Audio Recorder Module */}
           <AudioVisualizer
             selectedLanguage={selectedLang.label}
+            languageCode={selectedLang.code}
             onRecordingComplete={handleRecordingFinished}
           />
         </div>
@@ -237,11 +250,32 @@ export default function VoiceRequest() {
           {/* Transcribed Speech */}
           <div className="space-y-3">
             <div className="p-4 bg-brand-yellow/30 border-2 border-black rounded-xl">
-              <div className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-black/70 mb-1">
-                <Volume2 size={14} />
-                Original Audio Transcription ({selectedLang.label})
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-black/70">
+                  <Volume2 size={14} />
+                  Original Audio Transcription ({selectedLang.label})
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsEditingOriginal(!isEditingOriginal)}
+                  className="text-[11px] font-bold text-black underline flex items-center gap-1"
+                >
+                  <Edit3 size={12} />
+                  {isEditingOriginal ? 'Done Editing' : 'Edit'}
+                </button>
               </div>
-              <p className="font-heading font-extrabold text-base text-black">{transcription}</p>
+
+              {isEditingOriginal ? (
+                <textarea
+                  value={transcription}
+                  onChange={e => handleTranscriptionEdit(e.target.value)}
+                  rows={2}
+                  className="w-full bg-white border border-black rounded-lg p-2 text-xs font-medium focus:outline-none"
+                  placeholder="Edit your speech text..."
+                />
+              ) : (
+                <p className="font-heading font-extrabold text-base text-black">{transcription}</p>
+              )}
             </div>
 
             <div className="p-4 bg-gray-50 border-2 border-black rounded-xl">

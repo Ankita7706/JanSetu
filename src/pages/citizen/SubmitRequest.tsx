@@ -16,7 +16,7 @@ import { aiService } from '../../services/aiService';
 import { sendRequestConfirmationEmail } from '../../services/emailService';
 import type { Category, AIAnalysis, Severity, PriorityLevel, RequestLocation } from '../../types';
 import LocationPickerModal from '../../components/common/LocationPickerModal';
-import AudioVisualizer from '../../components/common/AudioVisualizer';
+import AudioVisualizer, { type AudioRecordingData } from '../../components/common/AudioVisualizer';
 import PriorityBadge from '../../components/common/PriorityBadge';
 import CategoryBadge from '../../components/common/CategoryBadge';
 
@@ -89,15 +89,18 @@ export default function SubmitRequest() {
     reader.readAsDataURL(file);
   };
 
-  const handleVoiceCompleted = () => {
+  const handleVoiceCompleted = (data: AudioRecordingData) => {
     setVoiceRecorded(true);
-    const sampleText =
-      category === 'Roads'
-        ? 'ମୁଖ୍ୟ ରାସ୍ତାରେ ବଡ଼ ଖାଲ ହୋଇ ଆମ୍ବୁଲାନ୍ସ ଯାଇପାରୁନାହିଁ। (Main road is severely broken and ambulances cannot pass).'
-        : `${category} issue in ${location}. Immediate repair needed.`;
-    setVoiceTranscription(sampleText);
-    if (!description) {
-      setDescription(sampleText);
+    const spoken = data?.transcript?.trim();
+    if (spoken) {
+      setVoiceTranscription(spoken);
+      setDescription(spoken);
+    } else {
+      const fallbackText = `${category} issue reported in ${location}. Immediate repair and inspection required.`;
+      setVoiceTranscription(fallbackText);
+      if (!description) {
+        setDescription(fallbackText);
+      }
     }
   };
 
