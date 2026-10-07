@@ -6,6 +6,8 @@ JanSetu is a multilingual digital platform designed to connect **citizens with g
 
 The platform uses **AI, demographic data, infrastructure indicators, and citizen requests** to identify demand hotspots and help policymakers prioritize infrastructure projects.
 
+Website Preview
+https://jansetucitizen-govt.netlify.app/login
 ---
 
 ## 🚀 Key Features
